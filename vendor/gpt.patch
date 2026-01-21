@@ -1,0 +1,17 @@
+diff --git a/configure.ac b/configure.ac
+index 4c9fdcd..895ee81 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -71,10 +71,10 @@ dnl------------------------------
+ dnl Checks for ANTLR
+ dnl------------------------------
+ 
+-AC_PATH_PROG(ANTLR_BIN, runantlr)
++AC_PATH_PROG(ANTLR_BIN, antlr)
+ 
+ if test "x${ANTLR}" = "x"; then
+-  AC_PATH_PROG(ANTLR_BIN, runantlr)
++  AC_PATH_PROG(ANTLR_BIN, antlr)
+ fi
+ 
+ if test "x${ANTLR_BIN}" = "x"; then

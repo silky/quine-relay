@@ -10,3 +10,6 @@ gst.im
 /src/grass-boot.dat
 *.sw*
 tmp.*proj
+
+.direnv/
+result

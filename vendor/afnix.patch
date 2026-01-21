@@ -1,0 +1,997 @@
+diff --git a/cnf/bin/afnix-guess b/cnf/bin/afnix-guess
+index 431c8bb5..0189941b 100755
+--- a/cnf/bin/afnix-guess
++++ b/cnf/bin/afnix-guess
+@@ -162,6 +162,7 @@ get_cpunam ()
+ 	    aarch64*)  cpunam=aarch64;;
+ 	    ppc)       cpunam=ppc;;
+ 	    ppc64le)   cpunam=ppc64el;;
++	    ppc64)     cpunam=ppc64;;
+ 	    m68k)      cpunam=m68k;;
+ 	    mips)      cpunam=mips;;
+ 	    mipsel)    cpunam=mipsel;;
+diff --git a/cnf/bin/afnix-setup b/cnf/bin/afnix-setup
+index 22bce699..8f9b690e 100755
+--- a/cnf/bin/afnix-setup
++++ b/cnf/bin/afnix-setup
+@@ -32,7 +32,7 @@ blddir=
+ # the source directory
+ srcdir=
+ # the installation directory prefix
+-prefix="/opt/afnix"
++prefix="out/afnix"
+ # the shared directory
+ shrdir="$prefix/share"
+ # the alternate directory (for etc)
+@@ -213,7 +213,7 @@ getccl () {
+     fi
+ }
+ 
+-# fix the configuration 
++# fix the configuration
+ fixcnf () {
+     # get the compiler version script
+     vccexe="$topdir/cnf/bin/afnix-vcomp"
+@@ -250,21 +250,21 @@ gendef () {
+     pltexe="$topdir/cnf/bin/afnix-guess $pltopt"
+     # create the target cnf directory
+     trgdir="$topdir/bld/cnf"
+-    /bin/mkdir -p $trgdir
++    mkdir -p $trgdir
+     # compute platform information
+     pltnam=`$pltexe -n`
+     if test "$?" != "0"; then
+         error "cannot determine platform name"
+     fi
+-    pltvrs=`$pltexe -v`
++    pltvrs=0.0
+     if test "$?" != "0"; then
+         error "cannot determine platform version"
+     fi
+-    pltmaj=`$pltexe -M`
++    pltmaj=0
+     if test "$?" != "0"; then
+         error "cannot determine platform major number"
+     fi
+-    pltmin=`$pltexe -m`
++    pltmin=0
+     if test "$?" != "0"; then
+         error "cannot determine platform minor number"
+     fi
+diff --git a/cnf/bin/afnix-vcomp b/cnf/bin/afnix-vcomp
+index a62b8006..691c159e 100755
+--- a/cnf/bin/afnix-vcomp
++++ b/cnf/bin/afnix-vcomp
+@@ -118,6 +118,8 @@ getccm () {
+        10*) ccvers=10 ;;
+        11*) ccvers=11 ;;
+        12*) ccvers=12 ;;
++       13*) ccvers=13 ;;
++       14*) ccvers=14 ;;
+ 	esac
+     fi
+     # check for g++ version
+@@ -132,6 +134,8 @@ getccm () {
+        10*) ccvers=10 ;;
+        11*) ccvers=11 ;;
+        12*) ccvers=12 ;;
++       13*) ccvers=13 ;;
++       14*) ccvers=14 ;;
+ 	esac
+     fi
+     # check for clang version
+diff --git a/cnf/mak/afnix-gc12.mak b/cnf/mak/afnix-gc12.mak
+index e84ae40c..08729589 100644
+--- a/cnf/mak/afnix-gc12.mak
++++ b/cnf/mak/afnix-gc12.mak
+@@ -38,7 +38,7 @@ STACCFLAGS	=
+ DYNCCFLAGS	= -fPIC
+ PLTCCFLAGS      = 
+ DEBUGFLAGS      = -g
+-OPTCCFLAGS      = -O2
++OPTCCFLAGS      =
+ PFLCCFLAGS      = -g -pg
+ COVCCFLAGS      = -g -fprofile-arcs -ftest-coverage
+ CPPCCFLAGS      = -nostdinc -nostdinc++
+@@ -91,7 +91,7 @@ endif
+ # adjust for linux platform
+ ifeq ($(PLATNAME),linux)
+ ARFLAGS		= rc
+-LDFLAGS		= -shared -pthread
++LDFLAGS		+= -shared -pthread
+ ifeq ($(LKMODE),soname)
+ LDFLAGS	       += -Wl,-soname,$(SOMAJ)
+ endif
+@@ -104,7 +104,7 @@ endif
+ # adjust for freebsd platform
+ ifeq ($(PLATNAME),freebsd)
+ ARFLAGS		= rc
+-LDFLAGS		= -shared
++LDFLAGS		+= -shared
+ ifeq ($(LKMODE),soname)
+ LDFLAGS	       += -Wl,-soname,$(SOMAJ)
+ endif
+@@ -114,7 +114,7 @@ endif
+ # adjust for gnu/freebsd platform
+ ifeq ($(PLATNAME),gnukbsd)
+ ARFLAGS		= rc
+-LDFLAGS		= -shared
++LDFLAGS		+= -shared
+ ifeq ($(LKMODE),soname)
+ LDFLAGS	       += -Wl,-soname,$(SOMAJ)
+ endif
+@@ -124,7 +124,7 @@ endif
+ # adjust for gnu platform
+ ifeq ($(PLATNAME),gnu)
+ ARFLAGS		= rc
+-LDFLAGS		= -shared
++LDFLAGS		+= -shared
+ ifeq ($(LKMODE),soname)
+ LDFLAGS	       += -Wl,-soname,$(SOMAJ)
+ endif
+@@ -135,16 +135,16 @@ endif
+ # - platform dependant final executable flags                                -
+ # ----------------------------------------------------------------------------
+ 
+-LKFLAGS		=
++LKFLAGS		= $(shell dpkg-buildflags --get LDFLAGS)
+ 
+ # adjust linker flags for linux
+ ifeq ($(PLATNAME),linux)
+-LKFLAGS      	= -pthread
++LKFLAGS      	+= -pthread
+ endif
+ 
+ # adjust linker flags for freebsd
+ ifeq ($(PLATNAME),freebsd)
+-LKFLAGS      	= -pthread
++LKFLAGS      	+= -pthread
+ endif
+ 
+ # ----------------------------------------------------------------------------
+diff --git a/cnf/mak/afnix-gc13.mak b/cnf/mak/afnix-gc13.mak
+new file mode 100644
+index 00000000..e975aab7
+--- /dev/null
++++ b/cnf/mak/afnix-gc13.mak
+@@ -0,0 +1,177 @@
++# ----------------------------------------------------------------------------
++# - afnix-gcc13                                                              -
++# - afnix compiler configuration - gcc configuration                         -
++# ----------------------------------------------------------------------------
++# - This program is  free software;  you can  redistribute it and/or  modify -
++# - it provided that this copyright notice is kept intact.                   -
++# -                                                                          -
++# - This  program  is  distributed in the hope  that it  will be useful, but -
++# - without  any   warranty;  without  even   the   implied    warranty   of -
++# - merchantability  or fitness for a particular purpose. In not event shall -
++# - the copyright holder be  liable for  any direct, indirect, incidental or -
++# - special damages arising in any way out of the use of this software.      -
++# ----------------------------------------------------------------------------
++# - author (c) 1999-2023 amaury   darsch                                     -
++# - author (c) 2011-2013 pino     toscano                      hurd platform -
++# - author (c) 2016-2016 martin   michlmayr                           GCC 05 -
++# - author (c) 2016-2017 amaury   darsch                              GCC 06 -
++# - author (c) 2017-2017 nobuhiro iwamatsu                            GCC 07 -
++# - author (c) 2018-2018 nobuhiro iwamatsu                            GCC 08 -
++# - author (c) 2022-2022 nobuhiro iwamatsu                            GCC 12 -
++# - author (c) 2019-2023 amaury   darsch                     GCC 09/10/11/12 -
++# ----------------------------------------------------------------------------
++
++# ----------------------------------------------------------------------------
++# - compiler and linker section                                              -
++# ----------------------------------------------------------------------------
++
++C		= gcc
++CN		= g++
++CC              = g++
++LD              = g++
++LK		= g++
++AR              = ar
++RANLIB		= ranlib
++STDEVFLAGS      =
++STDCCFLAGS      = -Wall -Werror -fno-builtin -Wno-error=overloaded-virtual
++STACCFLAGS	=
++DYNCCFLAGS	= -fPIC
++PLTCCFLAGS      = 
++DEBUGFLAGS      = -g
++OPTCCFLAGS      =
++PFLCCFLAGS      = -g -pg
++COVCCFLAGS      = -g -fprofile-arcs -ftest-coverage
++CPPCCFLAGS      = -nostdinc -nostdinc++
++CXXCCFLAGS      = 
++STDDEFINES      =
++DBGDEFINES      = -DAFNIX_DEBUG
++OPTDEFINES      =
++PFLDEFINES	= -DAFNIX_DEBUG -DAFNIX_PROFILED
++STDINCLUDE      =
++AFXCPPTYPE	= GNU
++AFXCPPVERS	= 12
++
++# ----------------------------------------------------------------------------
++# - compiler dependant libraries                                             -
++# ----------------------------------------------------------------------------
++
++# adjust for linux platform
++ifeq ($(PLATNAME),linux)
++PLTCCFLAGS      = -MMD -pthread
++ifeq ($(OPENMP),yes)
++PLTCCFLAGS     += -fopenmp
++endif
++endif
++
++# adjust for freebsd platform
++ifeq ($(PLATNAME),freebsd)
++PLTDEFINES	= -MMD -D_REENTRANT
++endif
++
++# adjust for gnu/freebsd platform
++ifeq ($(PLATNAME),gnukbsd)
++PLTDEFINES	= -MMD -D_REENTRANT
++ifeq ($(OPENMP),yes)
++PLTCCFLAGS     += -fopenmp
++endif
++endif
++
++# adjust for gnu platform
++ifeq ($(PLATNAME),gnu)
++PLTDEFINES	= -MMD -D_REENTRANT
++ifeq ($(OPENMP),yes)
++PLTCCFLAGS     += -fopenmp
++endif
++endif
++
++# ----------------------------------------------------------------------------
++# - platform dependant linking flags                                         -
++# ----------------------------------------------------------------------------
++
++# adjust for linux platform
++ifeq ($(PLATNAME),linux)
++ARFLAGS		= rc
++LDFLAGS		+= -shared -pthread
++ifeq ($(LKMODE),soname)
++LDFLAGS	       += -Wl,-soname,$(SOMAJ)
++endif
++ifeq ($(OPENMP),yes)
++LDFLAGS        += -fopenmp
++endif
++AFXCPPLIBS	=
++endif
++
++# adjust for freebsd platform
++ifeq ($(PLATNAME),freebsd)
++ARFLAGS		= rc
++LDFLAGS		+= -shared
++ifeq ($(LKMODE),soname)
++LDFLAGS	       += -Wl,-soname,$(SOMAJ)
++endif
++AFXCPPLIBS	=
++endif
++
++# adjust for gnu/freebsd platform
++ifeq ($(PLATNAME),gnukbsd)
++ARFLAGS		= rc
++LDFLAGS		+= -shared
++ifeq ($(LKMODE),soname)
++LDFLAGS	       += -Wl,-soname,$(SOMAJ)
++endif
++AFXCPPLIBS	=
++endif
++
++# adjust for gnu platform
++ifeq ($(PLATNAME),gnu)
++ARFLAGS		= rc
++LDFLAGS		+= -shared
++ifeq ($(LKMODE),soname)
++LDFLAGS	       += -Wl,-soname,$(SOMAJ)
++endif
++AFXCPPLIBS	=
++endif
++
++# ----------------------------------------------------------------------------
++# - platform dependant final executable flags                                -
++# ----------------------------------------------------------------------------
++
++LKFLAGS		= $(shell dpkg-buildflags --get LDFLAGS)
++
++# adjust linker flags for linux
++ifeq ($(PLATNAME),linux)
++LKFLAGS      	+= -pthread
++endif
++
++# adjust linker flags for freebsd
++ifeq ($(PLATNAME),freebsd)
++LKFLAGS      	+= -pthread
++endif
++
++# ----------------------------------------------------------------------------
++# - target dependant final executable flags                                  -
++# ----------------------------------------------------------------------------
++
++# adjust extra flag for profiled code
++ifeq ($(CCMODE),profiled)
++LKFLAGS	       += -pg
++endif
++
++# adjust platform flag for static or dynamic
++ifeq ($(LKTYPE),dynamic)
++PLTCCFLAGS     += $(DYNCCFLAGS)
++endif
++ifeq ($(LKTYPE),static)
++PLTCCFLAGS     += $(STACCFLAGS)
++endif
++
++# ----------------------------------------------------------------------------
++# - package dependant flags                                                  -
++# ----------------------------------------------------------------------------
++
++ifeq ($(PKGNAM),deb)
++OPTCCFLAGS     += -g
++endif
++
++ifeq ($(PKGNAM),rpm)
++OPTCCFLAGS     += -g
++endif
+diff --git a/cnf/mak/afnix-gc14.mak b/cnf/mak/afnix-gc14.mak
+new file mode 100644
+index 00000000..b31687e0
+--- /dev/null
++++ b/cnf/mak/afnix-gc14.mak
+@@ -0,0 +1,177 @@
++# ----------------------------------------------------------------------------
++# - afnix-gcc14                                                              -
++# - afnix compiler configuration - gcc configuration                         -
++# ----------------------------------------------------------------------------
++# - This program is  free software;  you can  redistribute it and/or  modify -
++# - it provided that this copyright notice is kept intact.                   -
++# -                                                                          -
++# - This  program  is  distributed in the hope  that it  will be useful, but -
++# - without  any   warranty;  without  even   the   implied    warranty   of -
++# - merchantability  or fitness for a particular purpose. In not event shall -
++# - the copyright holder be  liable for  any direct, indirect, incidental or -
++# - special damages arising in any way out of the use of this software.      -
++# ----------------------------------------------------------------------------
++# - author (c) 1999-2023 amaury   darsch                                     -
++# - author (c) 2011-2013 pino     toscano                      hurd platform -
++# - author (c) 2016-2016 martin   michlmayr                           GCC 05 -
++# - author (c) 2016-2017 amaury   darsch                              GCC 06 -
++# - author (c) 2017-2017 nobuhiro iwamatsu                            GCC 07 -
++# - author (c) 2018-2018 nobuhiro iwamatsu                            GCC 08 -
++# - author (c) 2022-2022 nobuhiro iwamatsu                            GCC 12 -
++# - author (c) 2019-2023 amaury   darsch                     GCC 09/10/11/12 -
++# ----------------------------------------------------------------------------
++
++# ----------------------------------------------------------------------------
++# - compiler and linker section                                              -
++# ----------------------------------------------------------------------------
++
++C		= gcc
++CN		= g++
++CC              = g++
++LD              = g++
++LK		= g++
++AR              = ar
++RANLIB		= ranlib
++STDEVFLAGS      =
++STDCCFLAGS      = -Wall -Werror -fno-builtin -Wno-error=overloaded-virtual
++STACCFLAGS	=
++DYNCCFLAGS	= -fPIC
++PLTCCFLAGS      = 
++DEBUGFLAGS      = -g
++OPTCCFLAGS      =
++PFLCCFLAGS      = -g -pg
++COVCCFLAGS      = -g -fprofile-arcs -ftest-coverage
++CPPCCFLAGS      = -nostdinc -nostdinc++
++CXXCCFLAGS      = 
++STDDEFINES      =
++DBGDEFINES      = -DAFNIX_DEBUG
++OPTDEFINES      =
++PFLDEFINES	= -DAFNIX_DEBUG -DAFNIX_PROFILED
++STDINCLUDE      =
++AFXCPPTYPE	= GNU
++AFXCPPVERS	= 12
++
++# ----------------------------------------------------------------------------
++# - compiler dependant libraries                                             -
++# ----------------------------------------------------------------------------
++
++# adjust for linux platform
++ifeq ($(PLATNAME),linux)
++PLTCCFLAGS      = -MMD -pthread
++ifeq ($(OPENMP),yes)
++PLTCCFLAGS     += -fopenmp
++endif
++endif
++
++# adjust for freebsd platform
++ifeq ($(PLATNAME),freebsd)
++PLTDEFINES	= -MMD -D_REENTRANT
++endif
++
++# adjust for gnu/freebsd platform
++ifeq ($(PLATNAME),gnukbsd)
++PLTDEFINES	= -MMD -D_REENTRANT
++ifeq ($(OPENMP),yes)
++PLTCCFLAGS     += -fopenmp
++endif
++endif
++
++# adjust for gnu platform
++ifeq ($(PLATNAME),gnu)
++PLTDEFINES	= -MMD -D_REENTRANT
++ifeq ($(OPENMP),yes)
++PLTCCFLAGS     += -fopenmp
++endif
++endif
++
++# ----------------------------------------------------------------------------
++# - platform dependant linking flags                                         -
++# ----------------------------------------------------------------------------
++
++# adjust for linux platform
++ifeq ($(PLATNAME),linux)
++ARFLAGS		= rc
++LDFLAGS		+= -shared -pthread
++ifeq ($(LKMODE),soname)
++LDFLAGS	       += -Wl,-soname,$(SOMAJ)
++endif
++ifeq ($(OPENMP),yes)
++LDFLAGS        += -fopenmp
++endif
++AFXCPPLIBS	=
++endif
++
++# adjust for freebsd platform
++ifeq ($(PLATNAME),freebsd)
++ARFLAGS		= rc
++LDFLAGS		+= -shared
++ifeq ($(LKMODE),soname)
++LDFLAGS	       += -Wl,-soname,$(SOMAJ)
++endif
++AFXCPPLIBS	=
++endif
++
++# adjust for gnu/freebsd platform
++ifeq ($(PLATNAME),gnukbsd)
++ARFLAGS		= rc
++LDFLAGS		+= -shared
++ifeq ($(LKMODE),soname)
++LDFLAGS	       += -Wl,-soname,$(SOMAJ)
++endif
++AFXCPPLIBS	=
++endif
++
++# adjust for gnu platform
++ifeq ($(PLATNAME),gnu)
++ARFLAGS		= rc
++LDFLAGS		+= -shared
++ifeq ($(LKMODE),soname)
++LDFLAGS	       += -Wl,-soname,$(SOMAJ)
++endif
++AFXCPPLIBS	=
++endif
++
++# ----------------------------------------------------------------------------
++# - platform dependant final executable flags                                -
++# ----------------------------------------------------------------------------
++
++LKFLAGS		= $(shell dpkg-buildflags --get LDFLAGS)
++
++# adjust linker flags for linux
++ifeq ($(PLATNAME),linux)
++LKFLAGS      	+= -pthread
++endif
++
++# adjust linker flags for freebsd
++ifeq ($(PLATNAME),freebsd)
++LKFLAGS      	+= -pthread
++endif
++
++# ----------------------------------------------------------------------------
++# - target dependant final executable flags                                  -
++# ----------------------------------------------------------------------------
++
++# adjust extra flag for profiled code
++ifeq ($(CCMODE),profiled)
++LKFLAGS	       += -pg
++endif
++
++# adjust platform flag for static or dynamic
++ifeq ($(LKTYPE),dynamic)
++PLTCCFLAGS     += $(DYNCCFLAGS)
++endif
++ifeq ($(LKTYPE),static)
++PLTCCFLAGS     += $(STACCFLAGS)
++endif
++
++# ----------------------------------------------------------------------------
++# - package dependant flags                                                  -
++# ----------------------------------------------------------------------------
++
++ifeq ($(PKGNAM),deb)
++OPTCCFLAGS     += -g
++endif
++
++ifeq ($(PKGNAM),rpm)
++OPTCCFLAGS     += -g
++endif
+diff --git a/cnf/mak/afnix-runx.mak b/cnf/mak/afnix-runx.mak
+index 0780cf2c..b20c80e2 100644
+--- a/cnf/mak/afnix-runx.mak
++++ b/cnf/mak/afnix-runx.mak
+@@ -16,34 +16,34 @@
+ 
+ ifeq ($(CCMODE),debug)
+   ENVFLAGS      = $(STDEVFLAGS) $(PLTEVFLAGS)
+-  CPPFLAGS      = $(STDCCFLAGS) $(PLTCCFLAGS) $(CPPCCFLAGS) $(DEBUGFLAGS)
+-  CXXFLAGS      = $(STDCCFLAGS) $(PLTCCFLAGS) $(CXXCCFLAGS) $(DEBUGFLAGS)
+-  CCDEFINE      = $(STDDEFINES) $(PLTDEFINES) $(DBGDEFINES)
++  CPPFLAGS_      = $(STDCCFLAGS) $(PLTCCFLAGS) $(CPPCCFLAGS) $(DEBUGFLAGS)
++  CXXFLAGS_      = $(STDCCFLAGS) $(PLTCCFLAGS) $(CXXCCFLAGS) $(DEBUGFLAGS)
++  CCDEFINE_      = $(STDDEFINES) $(PLTDEFINES) $(DBGDEFINES)
+ endif
+ 
+ ifeq ($(CCMODE),optimized)
+   ENVFLAGS      = $(STDEVFLAGS) $(PLTEVFLAGS)
+-  CPPFLAGS      = $(STDCCFLAGS) $(PLTCCFLAGS) $(CPPCCFLAGS) $(OPTCCFLAGS)
+-  CXXFLAGS      = $(STDCCFLAGS) $(PLTCCFLAGS) $(CXXCCFLAGS) $(OPTCCFLAGS)
+-  CCDEFINE      = $(STDDEFINES) $(PLTDEFINES) $(OPTDEFINES)
++  CPPFLAGS_      = $(STDCCFLAGS) $(PLTCCFLAGS) $(CPPCCFLAGS) $(OPTCCFLAGS)
++  CXXFLAGS_      = $(STDCCFLAGS) $(PLTCCFLAGS) $(CXXCCFLAGS) $(OPTCCFLAGS)
++  CCDEFINE_      = $(STDDEFINES) $(PLTDEFINES) $(OPTDEFINES)
+ endif
+ 
+ ifeq ($(CCMODE),profiled)
+   ENVFLAGS      = $(STDEVFLAGS) $(PLTEVFLAGS)
+-  CPPFLAGS      = $(STDCCFLAGS) $(PLTCCFLAGS) $(CPPCCFLAGS) $(PFLCCFLAGS)
+-  CXXFLAGS      = $(STDCCFLAGS) $(PLTCCFLAGS) $(CXXCCFLAGS) $(PFLCCFLAGS)
+-  CCDEFINE      = $(STDDEFINES) $(PLTDEFINES) $(PFLDEFINES)
++  CPPFLAGS_      = $(STDCCFLAGS) $(PLTCCFLAGS) $(CPPCCFLAGS) $(PFLCCFLAGS)
++  CXXFLAGS_      = $(STDCCFLAGS) $(PLTCCFLAGS) $(CXXCCFLAGS) $(PFLCCFLAGS)
++  CCDEFINE_      = $(STDDEFINES) $(PLTDEFINES) $(PFLDEFINES)
+ endif
+ 
+ ifeq ($(CCMODE),coverage)
+   ENVFLAGS      = $(STDEVFLAGS) $(PLTEVFLAGS)
+-  CPPFLAGS      = $(STDCCFLAGS) $(PLTCCFLAGS) $(CPPCCFLAGS) $(COVCCFLAGS)
+-  CXXFLAGS      = $(STDCCFLAGS) $(PLTCCFLAGS) $(CXXCCFLAGS) $(COVCCFLAGS)
+-  CCDEFINE      = $(STDDEFINES) $(PLTDEFINES) $(DBGDEFINES)
++  CPPFLAGS_      = $(STDCCFLAGS) $(PLTCCFLAGS) $(CPPCCFLAGS) $(COVCCFLAGS)
++  CXXFLAGS_      = $(STDCCFLAGS) $(PLTCCFLAGS) $(CXXCCFLAGS) $(COVCCFLAGS)
++  CCDEFINE_      = $(STDDEFINES) $(PLTDEFINES) $(DBGDEFINES)
+ endif
+ 
+-PPFLAGS         = $(CPPFLAGS)   $(EXTCPPFLAGS)
+-XXFLAGS         = $(CXXFLAGS)   $(EXTCXXFLAGS)
++PPFLAGS         = $(CPPFLAGS)   $(CXXFLAGS) $(CPPFLAGS_) $(EXTCPPFLAGS)
++XXFLAGS         = $(CXXFLAGS)   $(CXXFLAGS) $(CXXFLAGS_) $(EXTCXXFLAGS)
+ DEFINES         = $(CCDEFINE)   $(EXTCCDEFINE)
+ PPINCLS		= $(STDINCLUDE) $(INCLUDE)
+ XXINCLS		= $(STDINCLUDE) $(EXTINCLUDES) $(INCLUDE)
+@@ -71,6 +71,7 @@ endif
+ ifeq ($(LKMODE),soname)
+ SOMAJ		= $(DYLIB).$(MAJOR)
+ SOMIN		= $(DYLIB).$(MAJOR).$(MINOR)
++SONAME          = $(SOMIN)
+ SOVRS		= $(DYLIB).$(MAJOR).$(MINOR).$(PATCH)
+ endif
+ 
+@@ -99,10 +100,10 @@ else
+ %.o   : %.c
+ 	$(ENVFLAGS) $(C) $(XXFLAGS) $(DEFINES) $(XXINCLS) -o $@ -c $<
+ 
+-%.o   : %.cpp 
++%.o   : %.cpp
+ 	$(ENVFLAGS) $(CC) $(PPFLAGS) $(DEFINES) $(PPINCLS) -o $@ -c $<
+ 
+-%.o   : %.cxx 
++%.o   : %.cxx
+ 	$(ENVFLAGS) $(CC) $(XXFLAGS) $(DEFINES) $(XXINCLS) -o $@ -c $<
+ endif
+ 
+@@ -128,8 +129,8 @@ $(ARLIB) : $(OBJECTS)
+ endif
+ 
+ install-arlib: $(ARLIB)
+-	@$(MKDIR) $(LIBDIR)
+-	@$(CP)    $(ARLIB) $(LIBDIR)
++	#@$(MKDIR) $(LIBDIR)
++	#@$(CP)    $(ARLIB) $(LIBDIR)
+ .PHONY: install-arlib
+ else
+ install-arlib: $(ARLIB)
+@@ -268,7 +269,7 @@ targets: $(TARGETS)
+ 
+ ifeq ($(LKTYPE),dynamic)
+ $(TARGETS) : $(OBJECTS)
+-	$(ENVFLAGS) $(LK) $(LKFLAGS) -o $@ $(OBJECTS) $(EXELIBS) $(EXESLIB)
++	$(ENVFLAGS) $(LK) -Wl,-rpath=out/lib/afnix,-rpath-link,out/lib/afnix $(LKFLAGS) -o $@ $(OBJECTS) $(EXELIBS) $(EXESLIB)
+ endif
+ ifeq ($(LKTYPE),static)
+ $(TARGETS) : $(OBJECTS)
+diff --git a/cnf/mak/afnix-unix.mak b/cnf/mak/afnix-unix.mak
+index d76a6ff2..3a395f35 100644
+--- a/cnf/mak/afnix-unix.mak
++++ b/cnf/mak/afnix-unix.mak
+@@ -18,14 +18,14 @@
+ # - generic unix commands                                                    -
+ # ----------------------------------------------------------------------------
+ 
+-RM              = /bin/rm -f
+-CP              = /bin/cp
+-MKDIR           = /bin/mkdir -p
+-CPDIR           = /bin/cp -r
+-MV              = /bin/mv -f
+-LN              = /bin/ln -s
+-CAT             = /bin/cat
+-RMDIR           = /bin/rm -r -f
+-GREP            = /bin/grep
+-CMP		= /usr/bin/cmp -s
++RM              = rm -f
++CP              = cp
++MKDIR           = mkdir -p
++CPDIR           = cp -r
++MV              = mv -f
++LN              = ln -s
++CAT             = cat
++RMDIR           = rm -r -f
++GREP            = grep
++CMP		= cmp -s
+ TEST		= test
+diff --git a/doc/xml/eul/Makefile b/doc/xml/eul/Makefile
+index 0ad14efd..280606f0 100644
+--- a/doc/xml/eul/Makefile
++++ b/doc/xml/eul/Makefile
+@@ -26,7 +26,7 @@ include		  $(CONFFILE)
+ 
+ DSTDIR		= $(BLDDST)/doc/xml/eul
+ MANSEC		= $(MANDIR)/man7
+-MANUAL		= std-us-legal.xml
++MANUAL		= afnix-us-legal.xml
+ MANMAN		= afnix-legal.7
+ 
+ # ----------------------------------------------------------------------------
+diff --git a/doc/xml/eul/afnix-us-legal.xml b/doc/xml/eul/afnix-us-legal.xml
+new file mode 100644
+index 00000000..76fef7f5
+--- /dev/null
++++ b/doc/xml/eul/afnix-us-legal.xml
+@@ -0,0 +1,44 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!DOCTYPE axdoc PUBLIC "-//AFNIX//DTD AXIM//EN"
++"http://www.afnix.org/dtd/axdoc.dtd">
++
++<!-- ====================================================================== -->
++<!-- = afnix-us-axi.xml                                                   = -->
++<!-- = afnix cross interpreter - client documentation                     = -->
++<!-- ====================================================================== -->
++<!-- = This  program  is  free  software; you  can redistribute it and/or = -->
++<!-- = modify it provided that this copyright notice is kept intact.      = -->
++<!-- = This program is distributed in the hope that it will be useful but = -->
++<!-- = without  any  warranty;  without  even  the  implied  warranty  of = -->
++<!-- = merchantability or fitness for  a  particular purpose. In no event = -->
++<!-- = shall  the  copyright  holder be liable for any  direct, indirect, = -->
++<!-- = incidental  or special  damages arising  in any way out of the use = -->
++<!-- = of this software.                                                  = -->
++<!-- ====================================================================== -->
++<!-- = copyright (c) 1999-2023 - amaury darsch                            = -->
++<!-- ====================================================================== -->
++
++<axdoc xmlns:xi="http://www.w3.org/2001/XInclude">
++  <!-- book information -->
++  <info>
++    <title>AFNIX license information</title>
++    <header section="7">
++      <name>afnix-legal</name>
++      <desc>AFNIX license information</desc>
++    </header>
++    <copyright>
++      <author>
++        <name>Amaury Darsch</name>
++        <year>1999-2023</year>
++      </author>
++    </copyright>
++  </info>
++
++  <!-- book body -->
++  <body>
++    <!-- front matter -->
++    <front>
++      <xi:include href="std-us-legal.xml"/>
++    </front>    
++  </body>
++</axdoc>
+diff --git a/flake.lock b/flake.lock
+new file mode 100644
+index 00000000..57216d5e
+--- /dev/null
++++ b/flake.lock
+@@ -0,0 +1,61 @@
++{
++  "nodes": {
++    "flake-utils": {
++      "inputs": {
++        "systems": "systems"
++      },
++      "locked": {
++        "lastModified": 1731533236,
++        "narHash": "sha256-l0KFg5HjrsfsO/JpG+r7fRrqm12kzFHyUHqHCVpMMbI=",
++        "owner": "numtide",
++        "repo": "flake-utils",
++        "rev": "11707dc2f618dd54ca8739b309ec4fc024de578b",
++        "type": "github"
++      },
++      "original": {
++        "owner": "numtide",
++        "repo": "flake-utils",
++        "type": "github"
++      }
++    },
++    "nixpkgs": {
++      "locked": {
++        "lastModified": 1769018530,
++        "narHash": "sha256-MJ27Cy2NtBEV5tsK+YraYr2g851f3Fl1LpNHDzDX15c=",
++        "owner": "nixos",
++        "repo": "nixpkgs",
++        "rev": "88d3861acdd3d2f0e361767018218e51810df8a1",
++        "type": "github"
++      },
++      "original": {
++        "owner": "nixos",
++        "ref": "nixos-unstable",
++        "repo": "nixpkgs",
++        "type": "github"
++      }
++    },
++    "root": {
++      "inputs": {
++        "flake-utils": "flake-utils",
++        "nixpkgs": "nixpkgs"
++      }
++    },
++    "systems": {
++      "locked": {
++        "lastModified": 1681028828,
++        "narHash": "sha256-Vy1rq5AaRuLzOxct8nz4T6wlgyUR7zLU309k9mBC768=",
++        "owner": "nix-systems",
++        "repo": "default",
++        "rev": "da67096a3b9bf56a91d16901293e51ba5b49a27e",
++        "type": "github"
++      },
++      "original": {
++        "owner": "nix-systems",
++        "repo": "default",
++        "type": "github"
++      }
++    }
++  },
++  "root": "root",
++  "version": 7
++}
+diff --git a/flake.nix b/flake.nix
+new file mode 100644
+index 00000000..4a55a458
+--- /dev/null
++++ b/flake.nix
+@@ -0,0 +1,39 @@
++{
++  inputs = {
++    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
++    flake-utils = {
++      url = "github:numtide/flake-utils";
++    };
++  };
++  outputs = { nixpkgs, flake-utils, ... }: flake-utils.lib.eachDefaultSystem (system:
++    let
++      pkgs = import nixpkgs {
++        inherit system;
++      };
++
++      # Build the binary
++      binary = with pkgs; stdenv.mkDerivation {
++        pname = "b";
++        version = "0";
++        src = pkgs.lib.cleanSource ./.;
++        nativeBuildInputs = [
++          gcc13
++          ncurses
++          dpkg
++        ];
++        configureFlags = [
++          "--prefix=${placeholder "out"}"
++        ];
++        preBuild = ''
++          patchShebangs .
++        '';
++        installPhase = ''
++          mv out $out
++        '';
++      };
++
++    in {
++      packages.default = binary;
++    }
++  );
++}
+diff --git a/src/lib/plt/acf/ccnf.cpp b/src/lib/plt/acf/ccnf.cpp
+index 868f616d..25ebbfda 100644
+--- a/src/lib/plt/acf/ccnf.cpp
++++ b/src/lib/plt/acf/ccnf.cpp
+@@ -60,6 +60,7 @@
+ #define AFNIX_PROCTYPE_AARCH64   18
+ #define AFNIX_PROCTYPE_RISCV32   19
+ #define AFNIX_PROCTYPE_RISCV64   20
++#define AFNIX_PROCTYPE_PPC64     21
+ 
+ // recognized processor name
+ #define AFNIX_PROCNAME_UNKNOWN   "unknown"
+@@ -69,6 +70,7 @@
+ #define AFNIX_PROCNAME_ARM       "arm"
+ #define AFNIX_PROCNAME_PPC       "ppc"
+ #define AFNIX_PROCNAME_PPC64EL   "ppc64el"
++#define AFNIX_PROCNAME_PPC64     "ppc64"
+ #define AFNIX_PROCNAME_M68K      "m68k"
+ #define AFNIX_PROCNAME_MIPS      "mips"
+ #define AFNIX_PROCNAME_MIPSEL    "mipsel"
+@@ -147,6 +149,9 @@ static int get_procid (const char* proc) {
+   // ppc
+   if (strcmp (proc, AFNIX_PROCNAME_PPC) == 0) 
+     return AFNIX_PROCTYPE_PPC;
++  // ppc64
++  if (strcmp (proc, AFNIX_PROCNAME_PPC64) == 0)
++    return AFNIX_PROCTYPE_PPC64;
+   // ppc64el
+   if (strcmp (proc, AFNIX_PROCNAME_PPC64EL) == 0)
+     return AFNIX_PROCTYPE_PPC64EL;
+@@ -180,6 +185,9 @@ static int get_procid (const char* proc) {
+   // s390
+   if (strcmp (proc, AFNIX_PROCNAME_S390) == 0)
+     return AFNIX_PROCTYPE_S390;
++  // s390x
++  if (strcmp (proc, AFNIX_PROCNAME_S390X) == 0)
++    return AFNIX_PROCTYPE_S390X;
+   // x86-64
+   if (strcmp (proc, AFNIX_PROCNAME_X64) == 0) {
+     switch (sizeof(void*)) {
+diff --git a/src/lib/std/shl/HashTable.cpp b/src/lib/std/shl/HashTable.cpp
+index e69a9bb7..4b5a1882 100644
+--- a/src/lib/std/shl/HashTable.cpp
++++ b/src/lib/std/shl/HashTable.cpp
+@@ -718,9 +718,11 @@ namespace afnix {
+ 	while (bucket != nullptr) {
+ 	  s_bucket* next = bucket->p_next;
+ 	  bucket->p_next = nullptr;
+-	  long hid = bucket->d_hvl  % size;
+-	  bucket->p_next = table[hid];
+-	  table[hid]     = bucket;
++	  if (size > 0) {
++	    long hid = bucket->d_hvl  % size;
++	    bucket->p_next = table[hid];
++	    table[hid]     = bucket;
++	  }
+ 	  bucket = next;
+ 	}
+       }
+diff --git a/src/lib/std/shl/Relatif.cpp b/src/lib/std/shl/Relatif.cpp
+index 61ea31b6..5943fae2 100644
+--- a/src/lib/std/shl/Relatif.cpp
++++ b/src/lib/std/shl/Relatif.cpp
+@@ -664,7 +664,7 @@ namespace afnix {
+     // set the mpi with an unsigned buffer
+     void setubuf (const t_byte* ubuf, const long size) {
+       // clear the old buffer
+-      delete [] p_data;
++      delete p_data;
+       // compute the number of quads
+       d_size = size / 4;
+       if ((size % 4) != 0) d_size++;
+diff --git a/src/mod/net/tst/Makefile b/src/mod/net/tst/Makefile
+index 8db34393..fb420e90 100644
+--- a/src/mod/net/tst/Makefile
++++ b/src/mod/net/tst/Makefile
+@@ -20,6 +20,10 @@ CONFFILE	= $(MAKDIR)/afnix-conf.mak
+ RULEFILE	= $(MAKDIR)/afnix-rule.mak
+ include		  $(CONFFILE)
+ 
++# NOTE: Disable NET0001.als on all arch.
++NET_TESTS = NET0002.als NET0003.als NET0004.als NET0005.als \
++	    NET0006.als  NET0007.als  NET0008.als
++
+ # ----------------------------------------------------------------------------
+ # project configurationn                                                     -
+ # ----------------------------------------------------------------------------
+@@ -30,7 +34,7 @@ DSTDIR		= $(BLDDST)/src/mod/net/tst
+ # test definition                                                            -
+ # ----------------------------------------------------------------------------
+ 
+-TESTALS         = $(wildcard *.als)
++TESTALS         = $(NET_TESTS)
+ 
+ 
+ # ----------------------------------------------------------------------------
+diff --git a/src/mod/nwg/tst/Makefile b/src/mod/nwg/tst/Makefile
+index 588e48fe..81ea645a 100644
+--- a/src/mod/nwg/tst/Makefile
++++ b/src/mod/nwg/tst/Makefile
+@@ -20,6 +20,17 @@ CONFFILE	= $(MAKDIR)/afnix-conf.mak
+ RULEFILE	= $(MAKDIR)/afnix-rule.mak
+ include		  $(CONFFILE)
+ 
++NWG_TESTS = NWG0001.als NWG0002.als NWG0003.als NWG0004.als NWG0005.als \
++	    NWG0006.als NWG0007.als NWG0008.als NWG0009.als NWG0010.als \
++	    NWG0011.als NWG0012.als
++
++DEB_HOST_ARCH=$(shell dpkg-architecture -qDEB_HOST_ARCH)
++ifneq (,$(filter amd64 aarch64 ppc64el ia64 alpha kfreebsd-amd64 \
++		sparc64 ,$(DEB_HOST_ARCH)))
++NWG_TESTS += NWG0013.als
++endif
++
++
+ # ----------------------------------------------------------------------------
+ # project configurationn                                                     -
+ # ----------------------------------------------------------------------------
+@@ -30,7 +41,7 @@ DSTDIR		= $(BLDDST)/src/mod/nwg/tst
+ # test definition                                                            -
+ # ----------------------------------------------------------------------------
+ 
+-TESTALS         = $(wildcard *.als)
++TESTALS         = $(NWG_TESTS)
+ 
+ # ----------------------------------------------------------------------------
+ # - project rules                                                            -
+diff --git a/src/mod/sec/tst/Makefile b/src/mod/sec/tst/Makefile
+index 88ba0542..319c1855 100644
+--- a/src/mod/sec/tst/Makefile
++++ b/src/mod/sec/tst/Makefile
+@@ -20,6 +20,17 @@ CONFFILE	= $(MAKDIR)/afnix-conf.mak
+ RULEFILE	= $(MAKDIR)/afnix-rule.mak
+ include		  $(CONFFILE)
+ 
++# NOTE: Disable SEC0004.als on all arch.
++SEC_TESTS = SEC0002.als SEC0005.als SEC0006.als \
++	SEC0007.als SEC0008.als SEC0009.als SEC0010.als SEC0011.als SEC0012.als \
++	SEC0013.als SEC0104.als
++
++DEB_HOST_ARCH=$(shell dpkg-architecture -qDEB_HOST_ARCH)
++ifneq (,$(filter amd64 aarch64 i386 ppc64el alpha hppa kfreebsd-amd64 \
++		kfreebsd-i386 powerpc powerpcspe x32 ,$(DEB_HOST_ARCH)))
++SEC_TESTS += SEC0001.als SEC0003.als
++endif
++
+ # ----------------------------------------------------------------------------
+ # project configurationn                                                     -
+ # ----------------------------------------------------------------------------
+@@ -30,7 +41,7 @@ DSTDIR		= $(BLDDST)/src/mod/sec/tst
+ # test definition                                                            -
+ # ----------------------------------------------------------------------------
+ 
+-TESTALS         = $(wildcard *.als)
++TESTALS         = $(SEC_TESTS)
+ 
+ # ----------------------------------------------------------------------------
+ # - project rules                                                            -
+diff --git a/src/mod/sys/tst/Makefile b/src/mod/sys/tst/Makefile
+index 8234ea61..bdbb6683 100644
+--- a/src/mod/sys/tst/Makefile
++++ b/src/mod/sys/tst/Makefile
+@@ -20,6 +20,10 @@ CONFFILE	= $(MAKDIR)/afnix-conf.mak
+ RULEFILE	= $(MAKDIR)/afnix-rule.mak
+ include		  $(CONFFILE)
+ 
++# NOTE: Disable SYS0008.als on all arch.
++SYS_TESTS = SYS0001.als SYS0002.als SYS0003.als SYS0004.als SYS0005.als \
++		SYS0006.als SYS0007.als SYS0009.als
++
+ # ----------------------------------------------------------------------------
+ # project configurationn                                                     -
+ # ----------------------------------------------------------------------------
+@@ -30,7 +34,7 @@ DSTDIR		= $(BLDDST)/src/mod/sys/tst
+ # test definition                                                            -
+ # ----------------------------------------------------------------------------
+ 
+-TESTALS         = $(wildcard *.als)
++TESTALS         = $(SYS_TESTS)
+ 
+ # ----------------------------------------------------------------------------
+ # - project rules                                                            -

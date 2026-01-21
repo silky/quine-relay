@@ -1,0 +1,190 @@
+diff --git a/src/ops.c b/src/ops.c
+index b03c06c..63e9fc2 100644
+--- a/src/ops.c
++++ b/src/ops.c
+@@ -695,7 +695,7 @@ yamSeg* expandCatch2
+       )
+ 
+    ;  BIT_OFF(seg->flags, accept)
+-                     /* fixordoc: why is pushEmpty not needed? */ 
++                     /* fixordoc: why is pushEmpty not needed? */
+    ;  return yamSegPush(seg, stuff)
+ ;  }
+ 
+@@ -1070,7 +1070,7 @@ yamSeg* expandXtag2
+ )
+    {  mcxTing* tag = arg(arg1_g)
+    ;  mcxTing* ops = arg(arg2_g)
+-   ;  return yamXtag(seg, tag, ops)  
++   ;  return yamXtag(seg, tag, ops)
+ ;  }
+ 
+ 
+@@ -1078,7 +1078,7 @@ yamSeg* expandXtag1
+ (  yamSeg*  seg
+ )
+    {  mcxTing* tag = arg(arg1_g)
+-   ;  return yamXtag(seg, tag, NULL)  
++   ;  return yamXtag(seg, tag, NULL)
+ ;  }
+ 
+ 
+@@ -1169,7 +1169,7 @@ yamSeg* expand_while_
+    ;  else
+       seg_check_flag(flag_zoem, seg)
+ 
+-                     /* fixordoc: why is pushEmpty not needed? */ 
++                     /* fixordoc: why is pushEmpty not needed? */
+    ;  return yamSegPush(seg, newtxt)
+ ;  }
+ 
+@@ -1614,22 +1614,22 @@ yamSeg* expandDefined2
+ yamSeg* expandIf3
+ (  yamSeg*  seg
+ )
+-   {  mcxTing* bool  =  arg(arg1_g)
++   {  mcxTing* bbool  =  arg(arg1_g)
+    ;  mcxTing* case1 =  arg(arg2_g)
+    ;  mcxTing* case0 =  arg(arg3_g)
+    ;  int b
+ 
+-   ;  if (yamDigest(bool, bool, seg))
++   ;  if (yamDigest(bbool, bbool, seg))
+       {  yamErr("\\if#3", "condition does not parse")
+       ;  mcxTingFree(&case0)
+       ;  mcxTingFree(&case1)
+-      ;  mcxTingFree(&bool)
++      ;  mcxTingFree(&bbool)
+       ;  return yamSegPushEmpty(seg)
+    ;  }
+ 
+-      b =   bool->len ? atoi(bool->str) :  0
++      b =   bbool->len ? atoi(bbool->str) :  0
+ 
+-   ;  mcxTingFree(&bool)
++   ;  mcxTingFree(&bbool)
+ 
+    ;  if (b)
+       {  mcxTingFree(&case0)
+@@ -1735,7 +1735,7 @@ yamSeg* expandGrapeGet
+    {  const char* str = NULL
+    ;  mcxTing* access = arg(arg1_g)
+    ;  mcxbool ok  =  TRUE   /* on purpose; grape key absence -> "" */
+-   
++
+    ;  do
+       {  if (yamDigest(access, access, seg))
+          break
+@@ -1792,10 +1792,10 @@ mcxstatus veto_system
+ yamSeg* expandSystem3
+ (  yamSeg*  seg
+ )
+-   {  mcxTing*    cmd   =  arg(arg1_g) 
++   {  mcxTing*    cmd   =  arg(arg1_g)
+    ;  mcxTing*    cmd_  =  mcxTingPrint(NULL, ":%s:", arg1_g->str)
+-   ;  mcxTing*    arx   =  arg(arg2_g) 
+-   ;  mcxTing*    data  =  arg(arg3_g) 
++   ;  mcxTing*    arx   =  arg(arg2_g)
++   ;  mcxTing*    data  =  arg(arg3_g)
+    ;  mcxTing*    out   =  NULL
+    ;  yamSeg*     argseg=  NULL
+    ;  char*       args[YAM_ARG_MAX+1]
+@@ -1983,7 +1983,7 @@ yamSeg* expandSpecial1
+    {  mcxTing*  yamtxt     =  arg(arg1_g)
+    ;  int      x           =  -1
+    ;  int      ct          =  0
+-   ;  mcxbool  ok          =  TRUE  
++   ;  mcxbool  ok          =  TRUE
+    ;  yamSeg*  newseg
+ 
+    ;  if (yamDigest(yamtxt, yamtxt, seg))
+@@ -2213,7 +2213,7 @@ enum
+ ,  F_AND ,  F_OR  ,  F_NOT ,  F_INV
+ ,  F_MAX ,  F_MIN
+ ,  F_CEIL,  F_FLOOR, F_IRAND, F_DRAND
+-,  F_ABS ,  F_SIGN,  F_ROUND , F_DEC,  F_INC  
++,  F_ABS ,  F_SIGN,  F_ROUND , F_DEC,  F_INC
+ }  ;
+ 
+ 
+@@ -2290,7 +2290,7 @@ yamSeg*  expandF2
+       ;  case F_CEIL    : g = ceil(f)           ;  break
+       ;  case F_ROUND   : g = floor(f+0.5)      ;  break
+       ;  case F_ABS     : g = f < 0 ? -f : f    ;  break
+-      ;  case F_DRAND   : g = (((unsigned long) random()) * 1.0 / (1.0 * RAND_MAX)) * f 
++      ;  case F_DRAND   : g = (((unsigned long) random()) * 1.0 / (1.0 * RAND_MAX)) * f
+                                                 ;  break
+       ;  case F_IRAND   : j = ((unsigned long) random()) % (unsigned) i, integral = TRUE
+                                                 ;  break
+@@ -2362,7 +2362,7 @@ yamSeg*  expandF3
+      /*  nothing */
+    ;  else
+       switch(modus)
+-      {  
++      {
+          case F_ADD     :  f3 = f1 + f2                  ; break
+       ;  case F_SUB     :  f3 = f1 - f2                  ; break
+       ;  case F_FRAC    :  f3 = f2 ? (f1/f2) : 0         ; break
+@@ -2532,13 +2532,13 @@ mcxstatus veto_redirect
+ ;  }
+ 
+ 
+-yamSeg*  expandWriteto1 
++yamSeg*  expandWriteto1
+ (  yamSeg* seg
+ )
+    {  mcxTing* newname     =  arg(arg1_g)
+-   ;  const char* curname  =  sinkGetDefaultName()  
++   ;  const char* curname  =  sinkGetDefaultName()
+    ;  const char* me       =  "\\writeto#3"
+-   ;  mcxIO* xf  
++   ;  mcxIO* xf
+    ;  mcxbool ok = FALSE
+ 
+    ;  do
+@@ -2675,7 +2675,7 @@ yamSeg* expandBegin2
+ yamSeg* expandEnd1
+ (  yamSeg*   seg
+ )
+-   {  mcxTing* end      =  arg(arg1_g) 
++   {  mcxTing* end      =  arg(arg1_g)
+    ;  const char* def   =  yamEnvEnd(end->str, seg)
+    ;  mcxTing* val      =  def ? mcxTingNew(def) : NULL
+    ;  mcxbool  ok       =  FALSE
+@@ -2895,7 +2895,7 @@ yamSeg* expandSet3
+    ;  }
+ 
+       yamStackFreeTmp(&tmpseg)
+-   ;  mcxTingFree(&spec) 
++   ;  mcxTingFree(&spec)
+ 
+    ;  do
+       {  if (condition)
+@@ -2939,12 +2939,12 @@ yamSeg* expandSet3
+       }
+       while (0)
+ 
+-   ;  mcxTingFree(&key) 
+-   ;  mcxTingFree(&val) 
+-   ;  mcxTingFree(&condition) 
+-   ;  mcxTingFree(&thestart) 
+-   ;  mcxTingFree(&thewidth) 
+-   ;  mcxTingFree(&dict_name) 
++   ;  mcxTingFree(&key)
++   ;  mcxTingFree(&val)
++   ;  mcxTingFree(&condition)
++   ;  mcxTingFree(&thestart)
++   ;  mcxTingFree(&thewidth)
++   ;  mcxTingFree(&dict_name)
+ 
+    ;  return seg->flags ? yamSegPushEmpty(seg) : seg
+ ;  }
+@@ -3133,7 +3133,7 @@ void mod_ops_init
+    ;  }
+ 
+       reg_end_g            =  mcxListSource(10, 0)
+-;  }  
++;  }
+ 
+ 
+ void mod_ops_digest

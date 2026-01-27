@@ -203,7 +203,7 @@
               '';
             };
 
-          sml-to-polyml = step "QR.sq" {
+          sml-to-subleq = step "QR.sq" {
             name = "sml-to-polyml";
             prev = squirrel-to-sml;
             inputs = [ pkgs.polyml ];
@@ -213,27 +213,27 @@
             '';
           };
 
-          polyml-to-subleq = step "QR.ss" {
+          subleq-to-surgescript = step "QR.ss" {
             name = "polyml-to-subleq";
-            prev = sml-to-polyml;
+            prev = sml-to-subleq;
             inputs = [ pkgs.ruby ];
             buildPhase = ''
               ruby ${./vendor/subleq.rb} QR.sq > QR.ss
             '';
           };
 
-          subleq-to-surgescript = step "QR.swift" {
+          surgescript-to-swift = step "QR.swift" {
             name = "subleq-to-surgescript";
-            prev = polyml-to-subleq;
+            prev = subleq-to-surgescript;
             inputs = [ pkgs.surgescript ];
             buildPhase = ''
               surgescript QR.ss > QR.swift
             '';
           };
 
-          surgescript-to-swift = pkgs2505.swift.stdenv.mkDerivation {
+          swift-to-tcl = pkgs2505.swift.stdenv.mkDerivation {
             name = "surgescript-to-swift";
-            src = "${subleq-to-surgescript.out}/share";
+            src = "${surgescript-to-swift.out}/share";
             buildInputs = with pkgs2505.swiftPackages; [
               swift
               swiftpm
@@ -253,7 +253,7 @@
 
           tcl-to-tc = step "QR.tcsh" {
             name = "tcl-to-tc";
-            prev = surgescript-to-swift;
+            prev = swift-to-tcl;
             inputs = [ pkgs.tcl ];
             buildPhase = ''
               tclsh QR.tcl > QR.tcsh

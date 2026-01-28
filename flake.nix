@@ -2,20 +2,18 @@
 #
 # - [x] Add check step for the hash
 # - [x] Pin all the commits of the git checkouts
-# - [ ] Minimise dependencies
-# - [ ] Remove `autoreconfHook` from any place where we do NOT modify the
-#       configure stuff.
-# - [ ] Refactor as list
-#       - Simplify `buildPhase` as list
+# - [ ] Sandaru-style runCommand
+# - [ ] Sandaru-style patches
+# - [ ] Sandaru-style parallel builds
+# - [ ] Check why spl is so slow
+# - [ ] Maybe switch to pkgs 25.11
 # - [ ] Push everything to silky cachix
-# - [ ] (maybe) minimise patches
 # - [ ] (maybe) Add Nix as the 129th language
-# - [ ] Comment here: https://github.com/NixOS/nixpkgs/issues/131492
+# - [ ] Add `#all` that gives everything at once.
 {
   inputs = {
     flake-utils.url = "github:numtide/flake-utils";
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    nixpkgs2511.url = "github:nixos/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
     nixpkgs2505.url = "github:nixos/nixpkgs/nixos-25.05";
   };
 
@@ -23,7 +21,6 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
-        pkgs2511 = import nixpkgs2511 { inherit system; };
         pkgs2505 = import nixpkgs2505 { inherit system; };
 
         step = file: { name, prev, inputs, buildPhase, doCheck ? true }: pkgs.stdenv.mkDerivation {
@@ -44,8 +41,6 @@
       in
       {
         packages = rec {
-          inherit m2;
-
           ruby-to-rs = pkgs.stdenv.mkDerivation {
             name = "ruby-to-rs";
             srcs = [ ./QR.rb ];
@@ -487,21 +482,20 @@
               '';
             };
 
-          zsh-to-aplus =
-            step "QR.+" {
-              name = "zsh-to-aplus";
-              prev = zoem-to-zsh;
-              inputs = [ pkgs.zsh ];
-              buildPhase = ''
-                zsh QR.zsh > QR.+
-              '';
-            };
+          zsh-to-aplus = step "QR.+" {
+            name = "zsh-to-aplus";
+            prev = zoem-to-zsh;
+            inputs = [ pkgs.zsh ];
+            buildPhase = ''
+              zsh QR.zsh > QR.+
+            '';
+          };
 
           aplus-to-ada =
             let
-              aplus = pkgs2511.stdenv.mkDerivation rec {
+              aplus = pkgs.stdenv.mkDerivation rec {
                 name = "aplus";
-                buildInputs = with pkgs2511; [
+                buildInputs = with pkgs; [
                   xorg.libX11
                   libnsl
                 ];
@@ -829,13 +823,9 @@
           cobol-to-coffeescript = step "QR.coffee" {
             name = "cobol-to-coffeescript";
             prev = cmake-to-cobol;
-
-            # Just use the exe direct; it seems the packages
-            # output is a bit odd.
-            inputs = [ ];
-
+            inputs = [ pkgs.gnucobol.bin ];
             buildPhase = ''
-              ${pkgs.lib.getExe pkgs.gnucobol} -O2 -x QR.cob
+              cobc -O2 -x QR.cob
               ./QR > QR.coffee
             '';
           };

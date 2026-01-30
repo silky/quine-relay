@@ -1,0 +1,117 @@
+diff --git a/cnf/bin/afnix-vcomp b/cnf/bin/afnix-vcomp
+index a62b8006..c75b13c3 100755
+--- a/cnf/bin/afnix-vcomp
++++ b/cnf/bin/afnix-vcomp
+@@ -85,101 +85,10 @@ getdef () {
+ 
+ # get the compiler makefile
+ getccm () {
+-    # check for android cross compiler
+-    if test "$ccname" = "acc" ; then
+-	ccmake="accs"
+-    fi
+-    # check for gcc
+-    if test "$ccname" = "gcc" ; then
+-	cctype="gc"
+-    fi
+-    # check for g++
+-    if test "$ccname" = "g++" ; then
+-	cctype="gc"
+-    fi
+-    # check for clang
+-    if test "$ccname" = "clang"; then
+-	cctype="cc"
+-    fi
+-    # check for clang++
+-    if test "$ccname" = "clang++"; then
+-	cctype="cc"
+-    fi
+-
+-    # check for gcc version
+-    if test "$ccname" = "gcc" ; then
+-        # get gcc version 
+ 	vers=`gcc -dumpversion`
+-	case $vers in
+-	6*) ccvers=06 ;;
+-	7*) ccvers=07 ;;
+-	8*) ccvers=08 ;;
+-	9*) ccvers=09 ;;
+-       10*) ccvers=10 ;;
+-       11*) ccvers=11 ;;
+-       12*) ccvers=12 ;;
+-	esac
+-    fi
+-    # check for g++ version
+-    if test "$ccname" = "g++" ; then
+-        # get gcc version 
+-	vers=`g++ -dumpversion`
+-	case $vers in
+-	6*) ccvers=06 ;;
+-	7*) ccvers=07 ;;
+-	8*) ccvers=08 ;;
+-	9*) ccvers=09 ;;
+-       10*) ccvers=10 ;;
+-       11*) ccvers=11 ;;
+-       12*) ccvers=12 ;;
+-	esac
+-    fi
+-    # check for clang version
+-    if test "$ccname" = "clang" ; then
+-        # get clang version 
+-	vers=`clang -v 2>&1 | grep version | awk '{print $3}'`
+-	if test "$vers" = "version" ; then
+-	    vers=`clang -v 2>&1 | grep version | awk '{print $4}'`
+-	fi
+-	case $vers in
+-	6*) ccvers=06 ;;
+-	7*) ccvers=07 ;;
+-	8*) ccvers=08 ;;
+-	9*) ccvers=09 ;;
+-       10*) ccvers=10 ;;
+-       11*) ccvers=11 ;;
+-       12*) ccvers=12 ;;
+-       13*) ccvers=13 ;;
+-	esac
+-    fi
+-    # check for clang++ version
+-    if test "$ccname" = "clang++" ; then
+-        # get clang version 
+-	vers=`clang++ -v 2>&1 | grep version | awk '{print $3}'`
+-	if test "$vers" = "version" ; then
+-	    vers=`clang -v 2>&1 | grep version | awk '{print $4}'`
+-	fi
+-	case $vers in
+-	6*) ccvers=06 ;;
+-	7*) ccvers=07 ;;
+-	8*) ccvers=08 ;;
+-	9*) ccvers=09 ;;
+-       10*) ccvers=10 ;;
+-       11*) ccvers=11 ;;
+-       12*) ccvers=12 ;;
+-       13*) ccvers=13 ;;
+-	esac
+-    fi
+-    # assemble ccmake
+-    if test -z "$ccmake" ; then
+-	if test -z "$cctype" ; then
+-	    error "cannot find compile type for $ccname"
+-	fi
+-	if test -z "$ccvers" ; then
+-	    error "cannot find version for compiler $ccname"
+-	fi
++  cctype="cc"
++  ccvers=10
+ 	ccmake=${cctype}${ccvers}
+-    fi
+ }
+ 
+ # ----------------------------------------------------------------------------
+@@ -213,7 +122,7 @@ do
+     --sdknam=*)    sdknam="$argopt";;
+     --sdkdir)      preopt=sdkdir;;
+     --sdkdir=*)    sdkdir="$argopt";;
+-    
++
+     *)             error "illegal option $nxtopt";;
+     esac
+ done

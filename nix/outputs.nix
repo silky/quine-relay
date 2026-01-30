@@ -624,6 +624,8 @@ with inputs; {
     in
     {
       packages = {
+        # Make a meta-package that contains all the outputs; this makes for
+        # easy inspection.
         default = pkgs.linkFarm "quine-relay" (
           pkgs.lib.mapAttrs'
             (_: drv:

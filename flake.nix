@@ -13,4 +13,16 @@
   outputs = inputs:
     inputs.flake-parts.lib.mkFlake { inherit inputs; }
       (inputs.import-tree ./nix);
+
+
+  # If you choose to trust it, this is an optional cache with the entire
+  # derivation pre-built.
+  nixConfig = {
+    extra-substituters = [
+      "https://silky.cachix.org"
+    ];
+    extra-trusted-public-keys = [
+      "silky.cachix.org-1:a8deHkaV2Qnk4U6fRxWb3J/XxPi6OSiMzAXTHeXVzho="
+    ];
+  };
 }

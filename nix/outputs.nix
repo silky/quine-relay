@@ -330,7 +330,7 @@ with inputs; {
           ruby ${../vendor/false.rb} ${fsharp-to-FALSE} > $out
         '';
 
-        flex-to-fish = c "QR.fish" [ flex gcc ] ''
+        flex-to-fish = c "QR.fish" [ gcc flex ] ''
           flex -o QR.fl.c ${FALSE-to-flex}
           gcc -o QR QR.fl.c
           ./QR > $out
@@ -420,7 +420,7 @@ with inputs; {
           ./QR > $out
         '';
 
-        intercal-to-jasmin = c "QR.j" [ intercal gcc pkg-config ] ''
+        intercal-to-jasmin = c "QR.j" [ gcc intercal pkg-config ] ''
           cp ${icon-to-intercal} QR.i
           ick -bfOc QR.i
           gcc -std=c99 QR.c -I ${intercal.out}/include/ick-* -o QR -lick
@@ -540,6 +540,85 @@ with inputs; {
 
         ocaml-to-octave = c "QR.octave" [ ocaml ] ''
           ocaml ${objc-to-ocaml} > $out
+        '';
+
+        octave-to-ook = c "QR.ook" [ octave ] ''
+          octave -qf ${ocaml-to-octave} > $out
+        '';
+
+        ook-to-pari = c "QR.gp" [ ruby ] ''
+          ruby ${../vendor/ook-to-bf.rb} ${octave-to-ook} QR.ook.bf
+          ruby ${../vendor/bf.rb} QR.ook.bf > $out
+        '';
+
+        pari-to-parser3 = c "QR.p" [ pari ] ''
+          gp -f -q ${ook-to-pari} > $out
+        '';
+
+        parser3-to-pascal = c "QR.pas" [ parser3 ] ''
+          # Safe-mode parser?!?!
+          cp ${pari-to-parser3} QR.p
+          parser3 QR.p > $out
+        '';
+
+        pascal-to-perl5 = c "QR.pl" [ gcc fpc ] ''
+          cp ${parser3-to-pascal} QR.pas
+          fpc QR.pas
+          ./QR > $out
+        '';
+
+        perl5-to-perl6 = c "QR.pl6" [ perl ] ''
+          perl ${pascal-to-perl5} > $out
+        '';
+
+        perl6-to-php = c "QR.php" [ rakudo ] ''
+          perl6 ${perl5-to-perl6} > $out
+        '';
+
+        php-to-piet = c "QR.png" [ php ] ''
+          php ${perl6-to-php} > $out
+        '';
+
+        piet-to-pike = c "QR.pike" [ piet ] ''
+          npiet ${php-to-piet} > $out
+        '';
+
+        pike-to-postscript = c "QR.ps" [ pike ] ''
+          pike ${piet-to-pike} > $out
+        '';
+
+        postscript-to-prolog = c "QR.prolog" [ ghostscript ] ''
+          gs -dNODISPLAY -q ${pike-to-postscript} > $out
+        '';
+
+        prolog-to-spin = c "QR.pr" [ swi-prolog ] ''
+          swipl -q -t qr -f ${postscript-to-prolog} > $out
+        '';
+
+        spin-to-python = c "QR.py" [ spin ] ''
+          spin -T ${prolog-to-spin} > $out
+        '';
+
+        python-to-r = c "QR.r" [ python3 ] ''
+          python ${spin-to-python} > $out
+        '';
+
+        r-to-ratfor = c "QR.ratfor" [ R ] ''
+          R -s -f ${python-to-r} > $out
+        '';
+
+        ratfor-to-rc = c "QR.rc" [ ratfor gfortran ] ''
+          ratfor -o QR.ratfor.f ${r-to-ratfor}
+          gfortran -o QR QR.ratfor.f
+          ./QR > $out
+        '';
+
+        rc-to-rexx = c "QR.rexx" [ rc ] ''
+          rc ${ratfor-to-rc} > $out
+        '';
+
+        rexx-to-ruby = c "QR.rb" [ regina ] ''
+          rexx ${rc-to-rexx} > $out
         '';
       };
     in

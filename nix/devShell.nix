@@ -47,7 +47,6 @@
           advancecomp
           optipng
           wabt
-          dpkg
         ];
 
         SKIP_FONT_CHECK = 1;

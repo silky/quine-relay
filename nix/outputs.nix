@@ -2,624 +2,833 @@
 with inputs; {
   perSystem = { pkgs, config, system, compiler, ... }:
     let
-      c = out: inputs: cmd: pkgs.runCommand out
-        {
-          nativeBuildInputs = inputs;
-        }
-        cmd;
+      c = ext: nativeBuildInputs: mkBuildPhase: {
+        inherit ext;
+        build = prev: outFile: step ext outFile {
+          inherit prev nativeBuildInputs;
+          buildPhase = mkBuildPhase outFile;
+        };
+      };
 
-      steps = with pkgs; rec {
-        ruby-to-rust = c "QR.rs" [ ruby ] ''
-          ruby ${../QR.rb} > $out
-        '';
+      c' =
+        { stdenv ? pkgs.stdenv
+        , overrideAttrsFn ? (_: { })
+        , doCheck ? true
+        }:
+        ext:
+        nativeBuildInputs:
+        mkBuildPhase: {
+          inherit ext;
+          build = prev: outFile: step ext outFile {
+            inherit
+              prev
+              nativeBuildInputs
+              stdenv
+              overrideAttrsFn
+              doCheck
+              ;
+            buildPhase = mkBuildPhase outFile;
+          };
+        };
 
-        rust-to-scala = c "QR.scala" [ gcc rustc ] ''
-          rustc ${ruby-to-rust} -o QR
-          ./QR > $out
-        '';
+      # TODO: Don't need this one and "c'".
+      step = ext: file:
+        { prev
+        , nativeBuildInputs
+        , buildPhase
+        , doCheck ? true
+        , stdenv ? pkgs.stdenv
+        , overrideAttrsFn ? (_: { })
+        }:
+        (stdenv.mkDerivation {
+          inherit buildPhase nativeBuildInputs;
+          name = ext;
+          src = "${prev.out}/share";
+          installPhase = ''
+            mkdir -p $out/share
+            mv ${file} $out/share/
+          '';
+          # Have to remove if we're adding new languages, as we don't
+          # generate this file yet.
+          inherit doCheck;
+          checkPhase = ''
+            hash=$(${pkgs.toybox}/bin/sha256sum ${file})
+            ${pkgs.toybox}/bin/grep $hash ${../SHA256SUMS}
+          '';
+        }).overrideAttrs overrideAttrsFn;
 
-        scala-to-guile = c "QR.scm" [ scala ] ''
-          scalac ${rust-to-scala}
-          scala QR > $out
-        '';
+      steps' = with drvs; [
+        rust
+        scala
+        guile
+        scilab
+        sed
+        spl
+        sl
+        squirrel
+        sml
+        subleq
+        surgescript
+        swift
+        tcl
+        tc
+        thue
+        typescript
+        unlambda
+        vala
+        velato
+        verilog
+        vim
+        vb
+        wasm-bin
+        wasm-txt
+        whitespace
+        xslt
+        yab
+        yorick
+        zoem
+        zsh
+        aplus
+        ada
+        afnix
+        aheui
+        algol
+        ante
+        aspectj
+        asymptote
+        ats
+        awk
+        bash
+        bc
+        beanshell
+        befunge
+        bcl8
+        brainf
+        c_
+        cpp
+        csharp
+        chef
+        clojure
+        cmake
+        cobol
+        coffeescript
+        clisp
+        crystal
+        d
+        dc
+        dhall
+        elixir
+        elisp
+        erlang
+        execline
+        fsharp
+        FALSE
+        flex
+        fish
+        forth
+        fortran77
+        fortran90
+        gambas
+        gap
+        gdb
+        genius
+        gnuplot
+        go
+        golfscript
+        gport
+        grass
+        groovy
+        gzip
+        haskell
+        haxe
+        icon
+        intercal
+        jasmin
+        java
+        javascript
+        jq
+        jsf
+        kotlin
+        ksh
+        lazyk
+        livescript
+        llvm
+        lolcode
+        lua
+        m4
+        make
+        minizinc
+        modula2
+        msil
+        mustache
+        nasm
+        neko
+        nickle
+        nim
+        objc
+        ocaml
+        octave
+        ook
+        pari
+        parser3
+        pascal
+        perl5
+        perl6
+        php
+        piet
+        pike
+        postscript
+        prolog
+        spin
+        python
+        r
+        ratfor
+        rc
+        rexx
+      ];
 
-        guile-to-scilab = c "QR.sci" [ guile ] ''
-          guile ${scala-to-guile} > $out
-        '';
 
-        scilab-to-sed = c "QR.sed" [ writableTmpDirAsHomeHook scilab-bin ] ''
+      steps'' = with pkgs.lib.lists;
+        zipListsWith
+          (a: b: { drv = a; nextExt = b.ext; name = "${a.ext}-to-${b.ext}"; })
+          steps'
+          # Final output is ruby (rb)
+          (drop 1 steps' ++ [{ ext = "rb"; }]);
+
+      # Build up to the nth step of the quine relay. If you pick some n < the
+      # largest one, it will just call the output "rb", even though it
+      # obviously is not.
+      buildUntil = n:
+        let
+          # Step 1. Ruby builds rust.
+          drv0 = pkgs.runCommand "ruby"
+            {
+              src = ../QR.rb;
+              nativeBuildInputs = [ pkgs.ruby ];
+            } ''
+            mkdir -p $out/share
+            ruby $src > $out/share/QR.rs
+          '';
+
+          # Step n. Build "this" with the output of the previous
+          # step, and produce the next file:
+          #
+          # n {n-1.out} > n+1.out
+          #
+          # e.g., effectively something like
+          #
+          # "rustc ${ruby-to-rust.out} > QR.scala"
+
+          mkDrv = prev: this: this.drv.build prev "QR.${this.nextExt}";
+        in
+        with pkgs.lib.lists; foldl mkDrv drv0 (take n steps'');
+
+
+      # A bit hacky; but generate all the indexed step functions, so we can
+      # easily build any part, or everything all at once.
+      steps = with pkgs.lib;
+        let ixd = lists.imap1 (i: x: x // { idx = i; }) steps'';
+        in attrsets.genAttrs' ixd (x: nameValuePair x.name (buildUntil x.idx));
+
+
+      drvs = with pkgs; {
+        rust = c "rs" [ rustc ] (outFile: ''
+          rustc QR.rs
+          ./QR > ${outFile}
+        '');
+
+        scala = c "scala" [ scala ] (outFile: ''
+          scalac QR.scala
+          scala QR > ${outFile}
+        '');
+
+        guile = c "scm" [ guile ] (outFile: ''
+          guile QR.scm > ${outFile}
+        '');
+
+        scilab = c "sci" [ writableTmpDirAsHomeHook scilab-bin ] (outFile: ''
           # Hack: Drop the first line; for some reason it contains a
           # grep warning.
-          scilab-cli -nwni -nb -f  ${guile-to-scilab} | tail -n +2 > $out
-        '';
+          scilab-cli -nwni -nb -f QR.sci | tail -n +2 > ${outFile}
+        '');
 
-        sed-to-spl = c "QR.spl" [ gnused ] ''
-          sed -E -f ${scilab-to-sed} ${scilab-to-sed} > $out
-        '';
+        sed = c "sed" [ gnused ] (outFile: ''
+          sed -E -f QR.sed QR.sed > ${outFile}
+        '');
 
-        spl-to-sl =
-          let QR-spl-c = c "QR.spl.c" [ spl2c ] "spl2c < ${sed-to-spl} > $out";
-          in c "QR.sl" [ spl2c glibc gcc ] ''
+        spl =
+          c "spl" [ spl2c ] (outFile: ''
+            spl2c < QR.spl > QR.spl.c
             gcc -z muldefs -o QR \
               -I ./${spl2c.out}/include \
               -L ./${spl2c.out}/lib \
-              ${QR-spl-c} \
+              QR.spl.c \
               -lspl \
               -lm
-            ./QR > $out
-          '';
+            ./QR > ${outFile}
+          '');
 
-        sl-to-squirrel = c "QR.nut" [ slang ] ''
-          slsh ${spl-to-sl} > $out
-        '';
+        sl = c "sl" [ slang ] (outFile: ''
+          slsh QR.sl > ${outFile}
+        '');
 
-        squirrel-to-sml = c "QR.sml" [ squirrel ] ''
-          sq ${sl-to-squirrel} > $out
-        '';
+        squirrel = c "nut" [ squirrel ] (outFile: ''
+          sq QR.nut > ${outFile}
+        '');
 
-        sml-to-subleq = c "QR.sq" [ polyml gcc ] ''
-          polyc -o QR ${squirrel-to-sml}
-          ./QR > $out
-        '';
+        sml = c "sml" [ polyml ] (outFile: ''
+          polyc -o QR QR.sml
+          ./QR > ${outFile}
+        '');
 
-        subleq-to-surgescript = c "QR.ss" [ ruby ] ''
-          ruby ${../vendor/subleq.rb} ${sml-to-subleq} > $out
-        '';
+        subleq = c "sq" [ ruby ] (outFile: ''
+          ruby ${../vendor/subleq.rb} QR.sq > ${outFile}
+        '');
 
-        surgescript-to-swift = c "QR.swift" [ surgescript ] ''
-          surgescript ${subleq-to-surgescript} > $out
-        '';
+        surgescript = c "ss" [ surgescript ] (outFile: ''
+          surgescript QR.ss > ${outFile}
+        '');
 
-        swift-to-tcl =
-          let pkgs2505 = import inputs.nixpkgs2505 { inherit system; };
-          in with pkgs2505; runCommandWith
-            {
-              name = "QR.tcl";
-              stdenv = swift.stdenv;
-              derivationArgs = {
-                nativeBuildInputs = with swiftPackages; [
-                  swift
-                  swiftpm
-                  Foundation
-                ];
-              };
-            } ''
-            export LD_LIBRARY_PATH=${pkgs2505.swiftPackages.Dispatch}/lib
-            swiftc ${surgescript-to-swift} -o QR
-            ./QR > $out
-          '';
+        swift =
+          let
+            pkgs2505 = import inputs.nixpkgs2505 { inherit system; };
+            runSwift = with pkgs2505; writeShellApplication {
+              name = "run-swift";
+              runtimeInputs = with swiftPackages; [
+                swift
+                swiftpm
+                Foundation
+              ];
+              text = ''
+                export LD_LIBRARY_PATH=${swiftPackages.Dispatch}/lib
+                swiftc QR.swift -o QR
+                ./QR > "$@"
+              '';
+            };
+          in
+          c' { stdenv = pkgs2505.swift.stdenv; } "swift" [ ] (outFile: ''
+            ${pkgs.lib.getExe runSwift} ${outFile}
+          '');
 
-        tcl-to-tc = c "QR.tcsh" [ tcl ] ''
-          tclsh ${swift-to-tcl} > $out
-        '';
+        tcl = c "tcl" [ tcl ] (outFile: ''
+          tclsh QR.tcl > ${outFile}
+        '');
 
-        tc-to-thue = c "QR.t" [ tcsh ] ''
-          tcsh ${tcl-to-tc} > $out
-        '';
+        tc = c "tcsh" [ tcsh ] (outFile: ''
+          tcsh QR.tcsh > ${outFile}
+        '');
 
-        thue-to-ts = c "QR.ts" [ ruby ] ''
-          ruby ${../vendor/thue.rb} ${tc-to-thue} > $out
-        '';
+        thue = c "t" [ ruby ] (outFile: ''
+          ruby ${../vendor/thue.rb} QR.t > ${outFile}
+        '');
 
-        ts-to-unlambda = c "QR.unl" [ typescript nodejs ] ''
-          tsc --outFile QR.ts.js ${thue-to-ts}
-          node QR.ts.js > $out
-        '';
+        typescript = c "ts" [ typescript nodejs ] (outFile: ''
+          tsc --outFile QR.ts.js QR.ts
+          node QR.ts.js > ${outFile}
+        '');
 
-        unlambda-to-vala = c "QR.vala" [ ruby ] ''
-          ruby ${../vendor/unlambda.rb} ${ts-to-unlambda} > $out
-        '';
+        unlambda = c "unl" [ ruby ] (outFile: ''
+          ruby ${../vendor/unlambda.rb} QR.unl > ${outFile}
+        '');
 
-        vala-to-velato = c "QR.mid" [ gcc vala pkg-config gobject-introspection ] ''
-          valac ${unlambda-to-vala} -o QR
-          ./QR > $out
-        '';
+        vala = c "vala" [ vala pkg-config gobject-introspection ]
+          (outFile: ''
+            valac QR.vala -o QR
+            ./QR > ${outFile}
+          '');
 
-        velato-to-verilog = c "QR.v" [ mono unzip ] ''
+        velato = c "mid" [ mono unzip ] (outFile: ''
           unzip ${../vendor/Velato_0_1.zip}
-          cp ${vala-to-velato} QR.mid
-          chmod 777 QR.mid
           mono Vlt.exe /s QR.mid
-          mono QR.exe > $out
-        '';
+          mono QR.exe > ${outFile}
+        '');
 
-        verilog-to-vim = c "QR.vim" [ iverilog ] ''
-          iverilog -o QR ${velato-to-verilog}
-          ./QR -vcd-none > $out
-        '';
+        verilog = c "v" [ iverilog ] (outFile: ''
+          iverilog -o QR QR.v
+          ./QR -vcd-none > ${outFile}
+        '');
 
-        vim-to-vb = c "QR.vb" [ vim ] ''
-          vim -EsS ${verilog-to-vim} > $out
-        '';
+        vim = c "vim" [ vim ] (outFile: ''
+          vim -EsS QR.vim > ${outFile}
+        '');
 
-        vb-to-wasm-bin = c "QR.wasm" [ dotnet-sdk ] ''
-          echo '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup><ItemGroup><Compile Include="${vim-to-vb}" /></ItemGroup></Project>' > tmp.vbproj
-          DOTNET_NOLOGO=1 dotnet run --project tmp.vbproj > $out
-        '';
+        vb = c "vb" [ dotnet-sdk ] (outFile: ''
+          echo '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup><ItemGroup><Compile Include="QR.vb" /></ItemGroup></Project>' > tmp.vbproj
+          DOTNET_NOLOGO=1 dotnet run --project tmp.vbproj > ${outFile}
+        '');
 
-        wasm-bin-to-wasm-text = c "QR.wat" [ writableTmpDirAsHomeHook wasmtime ] ''
-          wasmtime ${vb-to-wasm-bin} > $out
-        '';
+        wasm-bin = c "wasm" [ writableTmpDirAsHomeHook wasmtime ] (outFile: ''
+          wasmtime QR.wasm > ${outFile}
+        '');
 
-        wasm-text-to-whitespace = c "QR.ws" [ writableTmpDirAsHomeHook wabt wasmtime ] ''
-          wat2wasm ${wasm-bin-to-wasm-text} -o QR.wat.wasm
-          wasmtime QR.wat.wasm > $out
-        '';
+        wasm-txt = c "wat" [ writableTmpDirAsHomeHook wabt wasmtime ] (outFile: ''
+          wat2wasm QR.wat -o QR.wat.wasm
+          wasmtime QR.wat.wasm > ${outFile}
+        '');
 
-        whitespace-to-xslt = c "QR.xslt" [ ruby ] ''
-          ruby ${../vendor/whitespace.rb} ${wasm-text-to-whitespace} > $out
-        '';
+        whitespace = c "ws" [ ruby ] (outFile: ''
+          ruby ${../vendor/whitespace.rb} QR.ws > ${outFile}
+        '');
 
-        xslt-to-yab = c "QR.yab" [ libxslt ] ''
-          cp ${whitespace-to-xslt} QR.xslt
-          xsltproc QR.xslt > $out
-        '';
+        xslt = c "xslt" [ libxslt ] (outFile: ''
+          xsltproc QR.xslt > ${outFile}
+        '');
 
-        yab-to-yorick = c "QR.yorick" [ yabasic ] ''
-          yabasic ${xslt-to-yab} > $out
-        '';
+        yab = c "yab" [ yabasic ] (outFile: ''
+          yabasic QR.yab > ${outFile}
+        '');
 
-        yorick-to-zoem = c "QR.azm" [ yorick ] ''
-          yorick -batch ${yab-to-yorick} > $out
-        '';
+        yorick = c "yorick" [ yorick ] (outFile: ''
+          yorick -batch QR.yorick > ${outFile}
+        '');
 
-        zoem-to-zsh = c "QR.zsh" [ zoem ] ''
-          zoem -i ${yorick-to-zoem} > $out
-        '';
+        zoem = c "azm" [ zoem ] (outFile: ''
+          zoem -i QR.azm > ${outFile}
+        '');
 
-        zsh-to-aplus = c "QR.+" [ zsh ] ''
-          zsh ${zoem-to-zsh} > $out
-        '';
+        zsh = c "zsh" [ zsh ] (outFile: ''
+          zsh QR.zsh > ${outFile}
+        '');
 
-        aplus-to-ada = c "QR.adb" [ aplus ] ''
-          a+ ${zsh-to-aplus} > $out
-        '';
+        aplus = c "+" [ aplus ] (outFile: ''
+          a+ QR.+ > ${outFile}
+        '');
 
-        ada-to-afnix = c "QR.als" [ gnat ] ''
-          gnatmake ${aplus-to-ada} -o QR
-          ./QR > $out
-        '';
+        ada = c "ada" [ gnat ] (outFile: ''
+          gnatmake QR.ada -o QR
+          ./QR > ${outFile}
+        '');
 
-        afnix-to-aheui = c "QR.aheui" [ afnix ] ''
-          LD_LIBRARY_PATH=${afnix.out}/lib axi ${ada-to-afnix} > $out
-        '';
+        afnix = c "als" [ afnix ] (outFile: ''
+          LD_LIBRARY_PATH=${afnix.out}/lib axi QR.als > ${outFile}
+        '');
 
-        aheui-to-algol = c "QR.a68" [ ruby ] ''
-          ruby ${../vendor/aheui.rb} ${afnix-to-aheui} > $out
-        '';
+        aheui = c "aheui" [ ruby ] (outFile: ''
+          ruby ${../vendor/aheui.rb} QR.aheui > ${outFile}
+        '');
 
-        algol-to-ante = c "QR.ante" [ algol68g ] ''
-          a68g ${aheui-to-algol} > $out
-        '';
+        algol = c "a68" [ algol68g ] (outFile: ''
+          a68g QR.a68 > ${outFile}
+        '');
 
-        ante-to-aspectj = c "QR.aj" [ ruby ] ''
-          ruby ${../vendor/ante.rb} ${algol-to-ante} > $out
-        '';
+        ante = c "ante" [ ruby ] (outFile: ''
+          ruby ${../vendor/ante.rb} QR.ante > ${outFile}
+        '');
 
-        aspectj-to-asymptote = c "QR.asy" [ aspectj jre ] ''
+        aspectj = c "aj" [ aspectj jre ] (outFile: ''
           export CLASSPATH="$(find ${aspectj.out}/lib -name "*.jar" | tr $'\n' :):./."
-          cp ${ante-to-aspectj} QR.aj
           ajc QR.aj
-          java QR > $out
-        '';
+          java QR > ${outFile}
+        '');
 
-        asymptote-to-ats = c "QR.dats" [ asymptote ] ''
-          asy ${aspectj-to-asymptote} > $out
-        '';
+        asymptote = c "asy" [ asymptote ] (outFile: ''
+          asy QR.asy > ${outFile}
+        '');
 
-        ats-to-awk = c "QR.awk" [ gcc ats2 ] ''
-          patscc -o QR ${asymptote-to-ats}
-          ./QR > $out
-        '';
+        ats = c "dats" [ gcc ats2 ] (outFile: ''
+          patscc -o QR QR.dats
+          ./QR > ${outFile}
+        '');
 
-        awk-to-bash = c "QR.bash" [ ] ''
-          awk -f ${ats-to-awk} > $out
-        '';
+        awk = c "awk" [ ] (outFile: ''
+          awk -f QR.awk > ${outFile}
+        '');
 
-        bash-to-bc = c "QR.bc" [ ] ''
-          bash ${awk-to-bash} > $out
-        '';
+        bash = c "bash" [ ] (outFile: ''
+          bash QR.bash > ${outFile}
+        '');
 
-        bc-to-beanshell = c "QR.bsh" [ bc ] ''
-          BC_LINE_LENGTH=4000000 bc -q ${bash-to-bc} > $out
-        '';
+        bc = c "bc" [ bc ] (outFile: ''
+          BC_LINE_LENGTH=4000000 bc -q QR.bc > ${outFile}
+        '');
 
-        beanshell-to-befunge = c "QR.bef" [ jre_minimal ] ''
-          java -cp ${bsh} bsh.Interpreter ${bc-to-beanshell} > $out
-        '';
+        beanshell = c "bsh" [ jre_minimal ] (outFile: ''
+          java -cp ${bsh} bsh.Interpreter QR.bsh > ${outFile}
+        '');
 
-        befunge-to-bcl8 = c "QR.blc" [ cfunge ] ''
-          cfunge ${beanshell-to-befunge} > $out
-        '';
+        befunge = c "bef" [ cfunge ] (outFile: ''
+          cfunge QR.bef > ${outFile}
+        '');
 
-        bcl8-to-brainf = c "QR.bf" [ ruby ] ''
-          ruby ${../vendor/blc.rb} < ${befunge-to-bcl8} > $out
-        '';
+        bcl8 = c "blc" [ ruby ] (outFile: ''
+          ruby ${../vendor/blc.rb} < QR.blc > ${outFile}
+        '');
 
-        brainf-to-c = c "QR.c" [ ruby ] ''
-          ruby ${../vendor/bf.rb} ${bcl8-to-brainf} > $out
-        '';
+        brainf = c "bf" [ ruby ] (outFile: ''
+          ruby ${../vendor/bf.rb} QR.bf > ${outFile}
+        '');
 
-        c-to-cpp = c "QR.cpp" [ gcc ] ''
-          gcc -o QR ${brainf-to-c}
-          ./QR > $out
-        '';
+        c_ = c "c" [ ] (outFile: ''
+          gcc -o QR QR.c
+          ./QR > ${outFile}
+        '');
 
-        cpp-to-csharp = c "QR.cs" [ gcc ] ''
-          g++ -o QR ${c-to-cpp}
-          ./QR > $out
-        '';
+        cpp = c "cpp" [ ] (outFile: ''
+          g++ -o QR QR.cpp
+          ./QR > ${outFile}
+        '');
 
-        csharp-to-chef = c "QR.chef" [ dotnet-sdk ] ''
-          echo '<Project
-          Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup><ItemGroup><Compile Include="${cpp-to-csharp}" /></ItemGroup></Project>' > tmp.csproj &&
-              DOTNET_NOLOGO=1 dotnet run --project tmp.csproj > $out
-        '';
+        csharp = c "cs" [ dotnet-sdk ] (outFile: ''
+          echo '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup><ItemGroup><Compile Include="QR.cs" /></ItemGroup></Project>' > tmp.csproj
+          DOTNET_NOLOGO=1 dotnet run --project tmp.csproj > ${outFile}
+        '');
 
-        chef-to-clojure = c "QR.clj" [ chef ] ''
-          chef ${csharp-to-chef} > $out
-        '';
+        chef = c "chef" [ chef ] (outFile: ''
+          chef QR.chef > ${outFile}
+        '');
 
-        clojure-to-cmake = (c "QR.cmake" [ writableTmpDirAsHomeHook clojure ] ''
-          clojure ${chef-to-clojure} > $out
-        '').overrideAttrs (_: {
-          # Hack: Use a fixed-output derivation here to allow
-          # maven to talk to the internet.
-          outputHashAlgo = "sha256";
-          outputHashMode = "recursive";
-          outputHash = "sha256-RlzODPFerW5fQ7jlfOxcZs3KeH+wvmMYcgXQ55/LsVQ=";
-        });
+        clojure =
+          let
+            props = {
+              overrideAttrsFn = _: {
+                # Hack: Use a fixed-output derivation here to allow
+                # maven to talk to the internet.
+                outputHashAlgo = "sha256";
+                outputHashMode = "recursive";
+                outputHash = "sha256-x1MsyBbD06t0LSGywyS01glJjmKlKd/H0O9qjXXJ6jM=";
+              };
+            };
+          in
+          c' props "clj" [ writableTmpDirAsHomeHook clojure ] (outFile: ''
+            clojure QR.clj > ${outFile}
+          '');
 
-        cmake-to-cobol = c "QR.cob" [ cmake ] ''
-          cmake -P ${clojure-to-cmake} > $out
-        '';
+        cmake = c "cmake" [ ] (outFile: ''
+          ${lib.getExe cmake} -P QR.cmake > ${outFile}
+        '');
 
-        cobol-to-coffeescript = c "QR.coffee" [ gcc gnucobol.bin ] ''
-          cp ${cmake-to-cobol} QR.cob
+        cobol = c "cob" [ gnucobol.bin ] (outFile: ''
           cobc -O2 -x QR.cob
-          ./QR > $out
-        '';
+          ./QR > ${outFile}
+        '');
 
-        coffeescript-to-clisp = c "QR.lisp" [ coffeescript ] ''
-          coffee --nodejs --stack_size=100000 ${cobol-to-coffeescript} > $out
-        '';
+        coffeescript = c "coffee" [ coffeescript ] (outFile: ''
+          coffee --nodejs --stack_size=100000 QR.coffee > ${outFile}
+        '');
 
-        clisp-to-crystal = c "QR.cr" [ clisp ] ''
-          clisp ${coffeescript-to-clisp} > $out
-        '';
+        clisp = c "lisp" [ clisp ] (outFile: ''
+          clisp QR.lisp > ${outFile}
+        '');
 
-        crystal-to-d = c "QR.d" [ crystal ] ''
-          crystal ${clisp-to-crystal} > $out
-        '';
+        crystal = c "cr" [ crystal ] (outFile: ''
+          crystal QR.cr > ${outFile}
+        '');
 
-        d-to-dc = c "QR.dc" [ ldc ] ''
-          cp ${crystal-to-d} QR.d
-          ldc2 --run QR.d > $out
-        '';
+        d = c "d" [ ldc ] (outFile: ''
+          ldc2 --run QR.d > ${outFile}
+        '');
 
-        dc-to-dhall = c "QR.dhall" [ dc ] ''
-          dc ${d-to-dc} > $out || true
-        '';
+        dc = c "dc" [ dc ] (outFile: ''
+          dc QR.dc > ${outFile} || true
+        '');
 
-        dhall-to-elixir = c "QR.exs" [ dhall ] ''
-          dhall text --file ${dc-to-dhall} > $out
-        '';
+        dhall = c "dhall" [ dhall ] (outFile: ''
+          dhall text --file QR.dhall > ${outFile}
+        '');
 
-        elixir-to-elisp = c "QR.el" [ elixir ] ''
-          elixir ${dhall-to-elixir} > $out
-        '';
+        elixir = c "exs" [ elixir ] (outFile: ''
+          elixir QR.exs > ${outFile}
+        '');
 
-        elisp-to-erlang = c "QR.erl" [ emacs ] ''
-          emacs -Q --script ${elixir-to-elisp} > $out
-        '';
+        elisp = c "el" [ emacs ] (outFile: ''
+          emacs -Q --script QR.el > ${outFile}
+        '');
 
-        erlang-to-execline = c "QR.e" [ erlang ] ''
-          escript ${elisp-to-erlang} > $out
-        '';
+        erlang = c "erl" [ erlang ] (outFile: ''
+          escript QR.erl > ${outFile}
+        '');
 
-        execline-to-fsharp = c "QR.fsx" [ execline ] ''
-          execlineb ${erlang-to-execline} > $out
-        '';
+        execline = c "e" [ execline ] (outFile: ''
+          execlineb QR.e > ${outFile}
+        '');
 
-        fsharp-to-FALSE = c "QR.false" [ dotnet-sdk ] ''
-          echo '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup><ItemGroup><Compile Include="${execline-to-fsharp}" /></ItemGroup></Project>' > tmp.fsproj
-          DOTNET_NOLOGO=1 dotnet run --project tmp.fsproj | tail -n +3 > $out
-        '';
+        fsharp = c "fsx" [ dotnet-sdk ] (outFile: ''
+          echo '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup><ItemGroup><Compile Include="QR.fsx" /></ItemGroup></Project>' > tmp.fsproj
+          DOTNET_NOLOGO=1 dotnet run --project tmp.fsproj > ${outFile}
+        '');
 
-        FALSE-to-flex = c "QR.fl" [ ruby ] ''
-          ruby ${../vendor/false.rb} ${fsharp-to-FALSE} > $out
-        '';
+        FALSE = c "false" [ ruby ] (outFile: ''
+          ruby ${../vendor/false.rb} QR.false > ${outFile}
+        '');
 
-        flex-to-fish = c "QR.fish" [ gcc flex ] ''
-          flex -o QR.fl.c ${FALSE-to-flex}
+        flex = c "fl" [ flex ] (outFile: ''
+          flex -o QR.fl.c QR.fl
           gcc -o QR QR.fl.c
-          ./QR > $out
-        '';
+          ./QR > ${outFile}
+        '');
 
-        fish-to-forth = c "QR.fs" [ fish ] ''
-          fish ${flex-to-fish} > $out
-        '';
+        fish = c "fish" [ fish ] (outFile: ''
+          fish QR.fish > ${outFile}
+        '');
 
-        forth-to-fortran77 = c "QR.f" [ writableTmpDirAsHomeHook gforth ] ''
-          gforth ${fish-to-forth} > $out
-        '';
+        forth = c "fs" [ writableTmpDirAsHomeHook gforth ] (outFile: ''
+          gforth QR.fs > ${outFile}
+        '');
 
-        fortran77-to-fortran90 = c "QR.f90" [ gfortran ] ''
-          gfortran -o QR ${forth-to-fortran77}
-          ./QR > $out
-        '';
+        fortran77 = c "f" [ gfortran ] (outFile: ''
+          gfortran -o QR QR.f
+          ./QR > ${outFile}
+        '');
 
-        fortran90-to-gambas = c "QR.gbs" [ gfortran ] ''
-          gfortran -o QR ${fortran77-to-fortran90}
-          ./QR > $out
-        '';
+        fortran90 = c "f90" [ gfortran ] (outFile: ''
+          gfortran -o QR QR.f90
+          ./QR > ${outFile}
+        '');
 
-        gambas-to-gap = c "QR.g" [ gambas3 ] ''
-          gambas3-wrapped ${fortran90-to-gambas} > $out
-        '';
+        gambas = c "gbs" [ gambas3 ] (outFile: ''
+          gambas3-wrapped QR.gbs > ${outFile}
+        '');
 
-        gap-to-gdb = c "QR.gap" [ pkgs.gap-minimal ] ''
+        gap = c "g" [ pkgs.gap-minimal ] (outFile: ''
           # Gap emits a bunch of comments explaining missing packages; but we
           # don't care.
-          gap -q ${gambas-to-gap} | tail -n 2 > $out
-        '';
+          gap -q QR.g | tail -n 2 > ${outFile}
+        '');
 
-        gdb-to-genius = c "QR.gel" [ gdb ] ''
-          gdb -q -x ${gap-to-gdb} > $out
-        '';
+        gdb = c "gdb" [ gdb ] (outFile: ''
+          gdb -q -x QR.gdb > ${outFile}
+        '');
 
-        genius-to-gnuplot = c "QR.plt" [ genius ] ''
-          genius ${gdb-to-genius} > $out
-        '';
+        genius = c "gel" [ genius ] (outFile: ''
+          genius QR.gel > ${outFile}
+        '');
 
-        gnuplot-to-go = c "QR.go" [ gnuplot ] ''
-          gnuplot ${genius-to-gnuplot} > $out
-        '';
+        gnuplot = c "plt" [ gnuplot ] (outFile: ''
+          gnuplot QR.plt > ${outFile}
+        '');
 
-        go-to-golfscript = c "QR.gs" [ writableTmpDirAsHomeHook go ] ''
-          go run ${gnuplot-to-go} > $out
-        '';
+        go = c "go" [ writableTmpDirAsHomeHook go ] (outFile: ''
+          go run QR.go > ${outFile}
+        '');
 
-        golfscript-to-gport = c "QR.gpt" [ ruby ] ''
-          ruby ${../vendor/golfscript.rb} ${go-to-golfscript} > $out
-        '';
+        golfscript = c "gs" [ ruby ] (outFile: ''
+          ruby ${../vendor/golfscript.rb} QR.gs > ${outFile}
+        '');
 
-        gport-to-grass = c "QR.grass" [ gcc gpt ] ''
-          gpt -t QR.c ${golfscript-to-gport}
+        gport = c "gpt" [ gpt ] (outFile: ''
+          gpt -t QR.c QR.gpt
           gcc -o QR QR.c
-          ./QR > $out
-        '';
+          ./QR > ${outFile}
+        '');
 
-        grass-to-groovy = c "QR.groovy" [ ruby ] ''
-          ruby ${../vendor/grass.rb} ${gport-to-grass} > $out
-        '';
+        grass = c "grass" [ ruby ] (outFile: ''
+          ruby ${../vendor/grass.rb} QR.grass > ${outFile}
+        '');
 
-        groovy-to-gzip = c "QR.gz" [ groovy ] ''
-          groovy ${grass-to-groovy} > $out
-        '';
+        groovy = c "groovy" [ groovy ] (outFile: ''
+          groovy QR.groovy > ${outFile}
+        '');
 
-        gzip-to-haskell = c "QR.hs" [ gzip ] ''
-          gzip -cd ${groovy-to-gzip} > $out
-        '';
+        gzip = c "gz" [ gzip ] (outFile: ''
+          gzip -cd QR.gz > ${outFile}
+        '');
 
-        haskell-to-haxe = c "QR.hx" [ ghc ] ''
-          cp ${gzip-to-haskell} QR.hs
+        haskell = c "hs" [ ghc ] (outFile: ''
           ghc QR.hs
-          ./QR > $out
-        '';
+          ./QR > ${outFile}
+        '');
 
-        haxe-to-icon = c "QR.icn" [ haxe_4_0 neko ] ''
-          cp ${haskell-to-haxe} QR.hx
+        haxe = c "hx" [ haxe_4_0 neko ] (outFile: ''
           haxe -main QR -neko QR.n
-          neko QR.n > $out
-        '';
+          neko QR.n > ${outFile}
+        '');
 
-        icon-to-intercal = c "QR.i" [ unicon-lang ] ''
-          cp ${haxe-to-icon} QR.icn
+        icon = c "icn" [ unicon-lang ] (outFile: ''
           icont -s QR.icn
-          ./QR > $out
-        '';
+          ./QR > ${outFile}
+        '');
 
-        intercal-to-jasmin = c "QR.j" [ gcc intercal pkg-config ] ''
-          cp ${icon-to-intercal} QR.i
+        intercal = c "i" [ intercal pkg-config ] (outFile: ''
           ick -bfOc QR.i
           gcc -std=c99 QR.c -I ${intercal.out}/include/ick-* -o QR -lick
-          ./QR > $out
-        '';
+          ./QR > ${outFile}
+        '');
 
-        jasmine-to-java = c "QR.java" [ jasmin jre_minimal ] ''
-          cp ${intercal-to-jasmin} QR.j
+        jasmin = c "j" [ jasmin jre_minimal ] (outFile: ''
           jasmin QR.j
-          java QR > $out
-        '';
+          java QR > ${outFile}
+        '');
 
-        java-to-javascript = c "QR.js" [ jdk ] ''
-          cp ${jasmine-to-java} QR.java
+        java = c "java" [ jdk ] (outFile: ''
           javac QR.java
-          java QR > $out
-        '';
+          java QR > ${outFile}
+        '');
 
-        javascript-to-jq = c "QR.jq" [ nodejs ] ''
-          node ${java-to-javascript} > $out
-        '';
+        javascript = c "js" [ nodejs ] (outFile: ''
+          node QR.js > ${outFile}
+        '');
 
-        jq-to-jsf = c "QR.jsfuck" [ jq ] ''
-          jq -r -n -f ${javascript-to-jq} > $out
-        '';
+        jq = c "jq" [ jq ] (outFile: ''
+          jq -r -n -f QR.jq > ${outFile}
+        '');
 
-        jsf-to-kotlin = c "QR.kt" [ nodejs ] ''
-          node --stack_size=100000 ${jq-to-jsf} > $out
-        '';
+        jsf = c "jsfuck" [ nodejs ] (outFile: ''
+          node --stack_size=100000 QR.jsfuck > ${outFile}
+        '');
 
-        kotlin-to-ksh = c "QR.ksh" [ kotlin ] ''
-          kotlinc ${jsf-to-kotlin} -include-runtime -d QR.jar
-          kotlin QR.jar > $out
-        '';
+        kotlin = c "kt" [ kotlin ] (outFile: ''
+          kotlinc QR.kt -include-runtime -d QR.jar
+          kotlin QR.jar > ${outFile}
+        '');
 
-        ksh-to-lazyk = c "QR.lazy" [ ksh ] ''
-          ksh ${kotlin-to-ksh} > $out
-        '';
+        ksh = c "ksh" [ ksh ] (outFile: ''
+          ksh QR.ksh > ${outFile}
+        '');
 
-        lazyk-to-livescript = c "QR.ls" [ gcc ] ''
+        lazyk = c "lazy" [ ] (outFile: ''
           gcc ${../vendor/lazyk.c} -o lazyk
-          ./lazyk ${ksh-to-lazyk} > $out
-        '';
+          ./lazyk QR.lazy > ${outFile}
+        '');
 
-        livescript-to-llvm = c "QR.ll" [ livescript ] ''
-          lsc ${lazyk-to-livescript} > $out
-        '';
+        livescript = c "ls" [ livescript ] (outFile: ''
+          lsc QR.ls > ${outFile}
+        '');
 
-        llvm-to-lolcode = c "QR.lol" [ llvmPackages_20.libllvm ] ''
-          cp ${livescript-to-llvm} QR.ll
+        llvm = c "ll" [ llvmPackages_20.libllvm ] (outFile: ''
           llvm-as QR.ll
-          lli QR.bc > $out
-        '';
+          lli QR.bc > ${outFile}
+        '');
 
-        lolcode-to-lua = c "QR.lua" [ lolcode ] ''
-          lolcode-lci ${llvm-to-lolcode} > $out
-        '';
+        lolcode = c "lol" [ lolcode ] (outFile: ''
+          lolcode-lci QR.lol > ${outFile}
+        '');
 
-        lua-to-m4 = c "QR.m4" [ lua ] ''
-          lua ${lolcode-to-lua} > $out
-        '';
+        lua = c "lua" [ lua ] (outFile: ''
+          lua QR.lua > ${outFile}
+        '');
 
-        m4-to-make = c "QR.mk" [ gnum4 ] ''
-          m4 ${lua-to-m4} > $out
-        '';
+        m4 = c "m4" [ gnum4 ] (outFile: ''
+          m4 QR.m4 > ${outFile}
+        '');
 
-        make-to-minizinc = c "QR.mzn" [ gnumake ] ''
-          make -f ${m4-to-make} > $out
-        '';
+        make = c "mk" [ gnumake ] (outFile: ''
+          make -f QR.mk > ${outFile}
+        '');
 
-        minizinc-to-modula2 = c "QR.mod" [ minizinc ] ''
-          minizinc --solver COIN-BC --soln-sep "" ${make-to-minizinc} > $out
-        '';
+        minizinc = c "mzn" [ minizinc ] (outFile: ''
+          minizinc --solver COIN-BC --soln-sep "" QR.mzn > ${outFile}
+        '');
 
-        modula2-to-msil = c "QR.il" [ gcc extendedGcc ] ''
-          cp ${minizinc-to-modula2} QR.mod
+        modula2 = c "mod" [ extendedGcc ] (outFile: ''
           gm2 -fiso QR.mod -o QR -B ${gcc.libc_lib}/lib
-          ./QR > $out
-        '';
+          ./QR > ${outFile}
+        '');
 
-        msil-to-mustache = c "QR.mustache" [ mono ] ''
-          cp ${modula2-to-msil} QR.il
+        msil = c "il" [ mono ] (outFile: ''
           ilasm QR.il
-          mono QR.exe > $out
-        '';
+          mono QR.exe > ${outFile}
+        '');
 
-        mustache-to-nasm = c "QR.asm" [ mustache-go ] ''
-          mustache ${msil-to-mustache} ${msil-to-mustache} > $out
-        '';
+        # Hack: We are missing a final newline for the hashes to match.
+        mustache = c "mustache" [ mustache-go ] (outFile: ''
+          mustache QR.mustache QR.mustache > ${outFile}
+          echo >> ${outFile}
+        '');
 
-        nasm-to-neko = c "QR.neko" [ gcc nasm ] ''
-          nasm -felf ${mustache-to-nasm} -o QR.o
+        nasm = c "asm" [ nasm ] (outFile: ''
+          nasm -felf QR.asm -o QR.o
           ld -m elf_i386 -o QR QR.o
-          ./QR > $out
-        '';
+          ./QR > ${outFile}
+        '');
 
-        neko-to-nickle = c "QR.5c" [ neko ] ''
-          cp ${nasm-to-neko} QR.neko
+        neko = c "neko" [ neko ] (outFile: ''
           nekoc QR.neko
-          neko QR.n > $out
-        '';
+          neko QR.n > ${outFile}
+        '');
 
-        nickle-to-nim = c "QR.nim" [ nickle ] ''
-          nickle ${neko-to-nickle} > $out
-        '';
+        nickle = c "5c" [ nickle ] (outFile: ''
+          nickle QR.5c > ${outFile}
+        '');
 
-        nim-to-objc = c "QR.m" [ writableTmpDirAsHomeHook nim ] ''
-          cp ${nickle-to-nim} QR.nim
+        nim = c "nim" [ writableTmpDirAsHomeHook nim ] (outFile: ''
           nim compile QR.nim
-          ./QR > $out
-        '';
+          ./QR > ${outFile}
+        '');
 
-        objc-to-ocaml = c "QR.ml" [ (wrapCC extendedGcc) ] ''
-          gcc -o QR ${nim-to-objc}
-          ./QR > $out
-        '';
+        objc = c "m" [ (wrapCC extendedGcc) ] (outFile: ''
+          gcc -o QR QR.m
+          ./QR > ${outFile}
+        '');
 
-        ocaml-to-octave = c "QR.octave" [ ocaml ] ''
-          ocaml ${objc-to-ocaml} > $out
-        '';
+        ocaml = c "ml" [ ocaml ] (outFile: ''
+          ocaml QR.ml > ${outFile}
+        '');
 
-        octave-to-ook = c "QR.ook" [ octave ] ''
-          octave -qf ${ocaml-to-octave} > $out
-        '';
+        octave = c "octave" [ octave ] (outFile: ''
+          octave -qf QR.octave > ${outFile}
+        '');
 
-        ook-to-pari = c "QR.gp" [ ruby ] ''
-          ruby ${../vendor/ook-to-bf.rb} ${octave-to-ook} QR.ook.bf
-          ruby ${../vendor/bf.rb} QR.ook.bf > $out
-        '';
+        ook = c "ook" [ ruby ] (outFile: ''
+          ruby ${../vendor/ook-to-bf.rb} QR.ook QR.ook.bf
+          ruby ${../vendor/bf.rb} QR.ook.bf > ${outFile}
+        '');
 
-        pari-to-parser3 = c "QR.p" [ pari ] ''
-          gp -f -q ${ook-to-pari} > $out
-        '';
+        pari = c "gp" [ pari ] (outFile: ''
+          gp -f -q QR.gp > ${outFile}
+        '');
 
-        parser3-to-pascal = c "QR.pas" [ parser3 ] ''
-          # Safe-mode parser?!?!
-          cp ${pari-to-parser3} QR.p
-          parser3 QR.p > $out
-        '';
+        parser3 = c "p" [ parser3 ] (outFile: ''
+          parser3 QR.p > ${outFile}
+        '');
 
-        pascal-to-perl5 = c "QR.pl" [ gcc fpc ] ''
-          cp ${parser3-to-pascal} QR.pas
+        pascal = c "pas" [ fpc ] (outFile: ''
           fpc QR.pas
-          ./QR > $out
-        '';
+          ./QR > ${outFile}
+        '');
 
-        perl5-to-perl6 = c "QR.pl6" [ perl ] ''
-          perl ${pascal-to-perl5} > $out
-        '';
+        perl5 = c "pl" [ perl ] (outFile: ''
+          perl QR.pl > ${outFile}
+        '');
 
-        perl6-to-php = c "QR.php" [ rakudo ] ''
-          perl6 ${perl5-to-perl6} > $out
-        '';
+        perl6 = c "pl6" [ rakudo ] (outFile: ''
+          perl6 QR.pl6 > ${outFile}
+        '');
 
-        php-to-piet = c "QR.png" [ php ] ''
-          php ${perl6-to-php} > $out
-        '';
+        php = c "php" [ php ] (outFile: ''
+          php QR.php > ${outFile}
+        '');
 
-        piet-to-pike = c "QR.pike" [ piet ] ''
-          npiet ${php-to-piet} > $out
-        '';
+        piet = c "png" [ piet ] (outFile: ''
+          npiet QR.png > ${outFile}
+        '');
 
-        pike-to-postscript = c "QR.ps" [ pike ] ''
-          pike ${piet-to-pike} > $out
-        '';
+        pike = c "pike" [ pike ] (outFile: ''
+          pike QR.pike > ${outFile}
+        '');
 
-        postscript-to-prolog = c "QR.prolog" [ ghostscript ] ''
-          gs -dNODISPLAY -q ${pike-to-postscript} > $out
-        '';
+        postscript = c "ps" [ ghostscript ] (outFile: ''
+          gs -dNODISPLAY -q QR.ps > ${outFile}
+        '');
 
-        prolog-to-spin = c "QR.pr" [ swi-prolog ] ''
-          swipl -q -t qr -f ${postscript-to-prolog} > $out
-        '';
+        prolog = c "prolog" [ swi-prolog ] (outFile: ''
+          swipl -q -t qr -f QR.prolog > ${outFile}
+        '');
 
-        spin-to-python = c "QR.py" [ spin ] ''
-          spin -T ${prolog-to-spin} > $out
-        '';
+        spin = c "pr" [ spin ] (outFile: ''
+          spin -T QR.pr > ${outFile}
+        '');
 
-        python-to-r = c "QR.r" [ python3 ] ''
-          python ${spin-to-python} > $out
-        '';
+        python = c "py" [ python3 ] (outFile: ''
+          python QR.py > ${outFile}
+        '');
 
-        r-to-ratfor = c "QR.ratfor" [ R ] ''
-          R -s -f ${python-to-r} > $out
-        '';
+        r = c "R" [ R ] (outFile: ''
+          R -s -f QR.R > ${outFile}
+        '');
 
-        ratfor-to-rc = c "QR.rc" [ ratfor gfortran ] ''
-          ratfor -o QR.ratfor.f ${r-to-ratfor}
+        ratfor = c "ratfor" [ ratfor gfortran ] (outFile: ''
+          ratfor -o QR.ratfor.f QR.ratfor
           gfortran -o QR QR.ratfor.f
-          ./QR > $out
-        '';
+          ./QR > ${outFile}
+        '');
 
-        rc-to-rexx = c "QR.rexx" [ rc ] ''
-          rc ${ratfor-to-rc} > $out
-        '';
+        rc = c "rc" [ rc ] (outFile: ''
+          rc QR.rc > ${outFile}
+        '');
 
-        rexx-to-ruby = c "QR.rb" [ regina ] ''
-          rexx ${rc-to-rexx} > $out
-        '';
+        rexx = c "rexx" [ regina ] (outFile: ''
+          rexx QR.rexx > ${outFile}
+        '');
       };
     in
     {

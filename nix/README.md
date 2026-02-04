@@ -10,4 +10,4 @@ nix build github:silky/quine-relay/nix
 You can also build individual steps:
 
 ``` sh
-nix build .#php-to-piet
+nix build .#php-to-png

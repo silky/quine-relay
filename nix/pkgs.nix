@@ -59,7 +59,7 @@
         src = fetchFromGitHub {
           owner = "albertodemichelis";
           repo = "squirrel";
-          rev = "master";
+          rev = "f77074bdd6152d230609146a3d424c6f49e3770f";
           sha256 = "sha256-2Zi2HBBTruKIWHSyGgQsar4wVI5IxrpgF40AR68hHTU=";
         };
       };
@@ -76,7 +76,7 @@
         src = fetchFromGitHub {
           owner = "llnl";
           repo = "yorick";
-          rev = "master";
+          rev = "ea7012c87c379ee8e00ef8e0bde8e53f3fdb8492";
           sha256 = "sha256-gjabbLjVUPX9XrsrxDPTV4kmvd9sWRPmXDw+CRMqqbM=";
         };
         installPhase = ''
@@ -333,9 +333,6 @@
         postPatch = ''
           substituteInPlace Makefile.am --replace-fail "ve gtkextra src" "ve src"
         '';
-        # patches = [
-        #   ./vendor/genius.patch
-        # ];
         configureFlags = [
           "--disable-gnome"
         ];

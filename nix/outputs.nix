@@ -33,7 +33,9 @@ with inputs; {
             inherit doCheck;
             checkPhase = ''
               hash=$(${pkgs.toybox}/bin/sha256sum ${outFile})
-              ${pkgs.toybox}/bin/grep $hash ${../SHA256SUMS}
+              ${pkgs.toybox}/bin/grep $hash ${../SHA256SUMS} || \
+                (echo "Hash does not match SHA256SUMS file. Did you mean to disable this check?" \
+                  && exit 1)
             '';
           }).overrideAttrs overrideAttrsFn;
         };

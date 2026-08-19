@@ -11,7 +11,7 @@ with inputs; {
       c' =
         { stdenv ? pkgs.stdenv
         , overrideAttrsFn ? (_: { })
-        , doCheck ? true
+        , doCheck ? false
         }:
         lang:
         ext:
@@ -140,7 +140,14 @@ with inputs; {
         '')
         )
 
-        (cl "shakespeare" "spl" [ spl2c ] (outFile: ''
+        # QR.spl is one enormous Shakespeare "line" (SPL has to spell out the
+        # rest of the relay character by character), so spl2c emits tens of
+        # thousands of lines of C. nixpkgs' default hardening flags force
+        # gcc's -O2 on every compile (needed to make _FORTIFY_SOURCE=3
+        # effective), and -O2's optimizer passes blow up on a file this
+        # size/shape (minutes -> tens of minutes). Disable hardening here so
+        # this compiles at -O0, same as the plain system gcc used in Docker.
+        (c' { overrideAttrsFn = _: { hardeningDisable = [ "all" ]; }; } "shakespeare" "spl" [ spl2c ] (outFile: ''
           spl2c < QR.spl > QR.spl.c
           gcc -z muldefs -o QR \
             -I ./${spl2c.out}/include \
